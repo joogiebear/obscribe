@@ -18,6 +18,37 @@ const API =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000/api";
 
+function splitNoteContent(value: string) {
+  const [firstLine = "", ...rest] = value.split("\n");
+  return {
+    title: firstLine,
+    body: rest.join("\n"),
+  };
+}
+
+function noteTitle(note: Note) {
+  const title = splitNoteContent(note.content || "").title.trim();
+  return title || "Untitled";
+}
+
+function notePreview(note: Note) {
+  const body = splitNoteContent(note.content || "").body.trim();
+  return body || "No additional text";
+}
+
+function compactDate(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) return "Today";
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export default function Home() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
@@ -34,6 +65,10 @@ export default function Home() {
   const [content, setContent] = useState("");
   const [status, setStatus] = useState("Ready");
   const [error, setError] = useState("");
+  const [notebookQuery, setNotebookQuery] = useState("");
+  const [noteQuery, setNoteQuery] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   const headers = useMemo(
     () => ({
@@ -119,6 +154,7 @@ export default function Home() {
         setActiveNote(note);
         setNotes((current) => current.map((n) => (n.id === note.id ? note : n)));
         setStatus("Saved");
+        setLastSavedAt(new Date());
       } catch (err) {
         setStatus("Save failed");
         setError(err instanceof Error ? err.message : "Unable to save note");
@@ -161,6 +197,7 @@ export default function Home() {
 
   useEffect(() => {
     setContent(activeNote?.content || "");
+    setLastSavedAt(null);
   }, [activeNote?.id, activeNote?.content]);
 
   useEffect(() => {
@@ -203,9 +240,8 @@ export default function Home() {
     }
   }
 
-  async function createNotebook(e: FormEvent) {
-    e.preventDefault();
-    const name = notebookName.trim();
+  async function createNotebookNamed(value: string) {
+    const name = value.trim();
     if (!name) return;
 
     try {
@@ -219,6 +255,11 @@ export default function Home() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create notebook");
     }
+  }
+
+  async function createNotebook(e: FormEvent) {
+    e.preventDefault();
+    await createNotebookNamed(notebookName);
   }
 
   async function createNote() {
@@ -246,6 +287,31 @@ export default function Home() {
       setStatus("Test email failed");
       setError(err instanceof Error ? err.message : "Unable to send test email");
     }
+  }
+
+  const filteredNotebooks = notebooks.filter((notebook) =>
+    notebook.name.toLowerCase().includes(notebookQuery.trim().toLowerCase()),
+  );
+  const filteredNotes = notes.filter((note) => {
+    const query = noteQuery.trim().toLowerCase();
+    if (!query) return true;
+    return `${noteTitle(note)} ${notePreview(note)}`.toLowerCase().includes(query);
+  });
+  const noteParts = splitNoteContent(content);
+  const isDirty = activeNote ? (activeNote.content || "") !== content : false;
+  const displayStatus =
+    status === "Saved" && lastSavedAt
+      ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : isDirty && status !== "Saving..."
+        ? "Unsaved changes"
+        : status;
+
+  function updateNoteTitle(value: string) {
+    setContent(noteParts.body ? `${value}\n${noteParts.body}` : value);
+  }
+
+  function updateNoteBody(value: string) {
+    setContent(noteParts.title ? `${noteParts.title}\n${value}` : `\n${value}`);
   }
 
   if (!token) {
@@ -328,9 +394,9 @@ export default function Home() {
             </p>
           </div>
         </div>
-        <div className="status">{status}</div>
-        <button onClick={sendTestEmail} className="secondary" type="button">
-          Test email
+        <div className="status">{displayStatus}</div>
+        <button onClick={() => setShowSettings((value) => !value)} className="secondary" type="button">
+          Settings
         </button>
         <button onClick={logout} className="secondary" type="button">
           Logout
@@ -338,6 +404,17 @@ export default function Home() {
       </header>
 
       {error && <p className="error errorWide">{error}</p>}
+      {showSettings && (
+        <section className="settingsBar" aria-label="Workspace settings">
+          <div>
+            <p className="kicker">Admin</p>
+            <h2 className="settingsTitle">Self-host checks</h2>
+          </div>
+          <button onClick={sendTestEmail} className="secondary" type="button">
+            Send test email
+          </button>
+        </section>
+      )}
 
       <section className="shell">
         <aside className="rail" aria-label="Notebooks">
@@ -359,9 +436,15 @@ export default function Home() {
               +
             </button>
           </form>
+          <input
+            className="searchInput"
+            value={notebookQuery}
+            onChange={(e) => setNotebookQuery(e.target.value)}
+            placeholder="Search notebooks"
+          />
 
           <div className="list">
-            {notebooks.map((notebook) => (
+            {filteredNotebooks.map((notebook) => (
               <button
                 key={notebook.id}
                 onClick={() => setActiveNotebook(notebook)}
@@ -371,7 +454,14 @@ export default function Home() {
                 <span>{notebook.name}</span>
               </button>
             ))}
-            {!notebooks.length && <p className="emptySmall">Create a notebook to start.</p>}
+            {!notebooks.length && (
+              <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
+                Create your first notebook
+              </button>
+            )}
+            {!!notebooks.length && !filteredNotebooks.length && (
+              <p className="emptySmall">No notebooks match that search.</p>
+            )}
           </div>
         </aside>
 
@@ -390,10 +480,16 @@ export default function Home() {
               New
             </button>
           </div>
+          <input
+            className="searchInput"
+            value={noteQuery}
+            onChange={(e) => setNoteQuery(e.target.value)}
+            placeholder="Search notes"
+            disabled={!notes.length}
+          />
 
           <div className="list">
-            {notes.map((note) => {
-              const title = (note.content || "Untitled note").trim() || "Untitled note";
+            {filteredNotes.map((note) => {
               return (
                 <button
                   key={note.id}
@@ -401,12 +497,18 @@ export default function Home() {
                   className={activeNote?.id === note.id ? "noteActive" : "noteItem"}
                   type="button"
                 >
-                  <span>{title.slice(0, 70)}</span>
-                  {note.updated_at && <small>{new Date(note.updated_at).toLocaleString()}</small>}
+                  <span>{noteTitle(note).slice(0, 70)}</span>
+                  <small>{notePreview(note).slice(0, 90)}</small>
+                  {note.updated_at && <small>{compactDate(note.updated_at)}</small>}
                 </button>
               );
             })}
-            {!notes.length && <p className="emptySmall">No notes in this notebook yet.</p>}
+            {!notes.length && (
+              <button className="emptyAction" onClick={createNote} disabled={!activeNotebook} type="button">
+                Create your first note
+              </button>
+            )}
+            {!!notes.length && !filteredNotes.length && <p className="emptySmall">No notes match that search.</p>}
           </div>
         </aside>
 
@@ -417,18 +519,24 @@ export default function Home() {
                 <div>
                   <p className="kicker">Editor</p>
                   <h2 className="editorTitle">
-                    {(activeNote.content || "Untitled note").slice(0, 80) || "Untitled note"}
+                    {noteParts.title.trim() || "Untitled"}
                   </h2>
                 </div>
-                <button onClick={() => saveNote(content)} className="secondary" type="button">
+                <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button">
                   Save now
                 </button>
               </div>
+              <input
+                className="titleInput"
+                value={noteParts.title}
+                onChange={(e) => updateNoteTitle(e.target.value)}
+                placeholder="Untitled"
+              />
               <textarea
                 className="editor"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Start writing..."
+                value={noteParts.body}
+                onChange={(e) => updateNoteBody(e.target.value)}
+                placeholder="Write, paste, or draft here..."
               />
             </>
           ) : (
@@ -436,6 +544,9 @@ export default function Home() {
               <div className="bigIcon">O</div>
               <h2>Select or create a note</h2>
               <p>Your editor will appear here.</p>
+              <button className="primary emptyStateButton" onClick={createNote} disabled={!activeNotebook} type="button">
+                New note
+              </button>
             </div>
           )}
         </section>

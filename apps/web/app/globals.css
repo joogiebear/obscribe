@@ -197,6 +197,25 @@ textarea:focus-visible {
   margin: 0 auto 16px;
 }
 
+.settingsBar {
+  max-width: 1440px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #ccd7d4;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 14px 16px;
+  box-shadow: 0 14px 38px rgba(31, 46, 42, 0.07);
+}
+
+.settingsTitle {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
 .topbar {
   max-width: 1440px;
   margin: 0 auto 18px;
@@ -308,6 +327,17 @@ textarea:focus-visible {
   margin-bottom: 14px;
 }
 
+.searchInput {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dce5e2;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #1d2421;
+  margin-bottom: 13px;
+}
+
 .addButton {
   min-width: 44px;
   font-size: 22px;
@@ -383,6 +413,16 @@ small {
   font-size: 14px;
 }
 
+.emptyAction {
+  width: 100%;
+  border: 1px dashed #b8c8c3;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #33413d;
+  padding: 14px;
+  font-weight: 900;
+}
+
 .editorTop {
   padding-bottom: 16px;
   border-bottom: 1px solid #e4ebe8;
@@ -398,6 +438,22 @@ small {
   white-space: nowrap;
 }
 
+.titleInput {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  padding: 8px 4px 10px;
+  color: #172421;
+  background: transparent;
+  font-size: 42px;
+  line-height: 1.12;
+  font-weight: 900;
+}
+
+.titleInput::placeholder {
+  color: #aab6b2;
+}
+
 .editor {
   flex: 1;
   min-height: 0;
@@ -410,6 +466,11 @@ small {
   line-height: 1.8;
   background: transparent;
   color: #1d2421;
+}
+
+.emptyStateButton {
+  margin-top: 12px;
+  justify-self: center;
 }
 
 .emptyState {
