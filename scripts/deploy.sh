@@ -176,12 +176,18 @@ yes_no() {
 set_env_value() {
   local key="$1"
   local value="$2"
-  local escaped
-
-  escaped="$(printf '%s' "${value}" | sed 's/[\/&|]/\\&/g')"
+  local tmp_file
 
   if grep -q "^${key}=" "${ENV_FILE}"; then
-    sed -i "s|^${key}=.*|${key}=${escaped}|" "${ENV_FILE}"
+    tmp_file="$(mktemp)"
+    while IFS= read -r line || [ -n "${line}" ]; do
+      case "${line}" in
+        "${key}="*) printf '%s=%s\n' "${key}" "${value}" >> "${tmp_file}" ;;
+        *) printf '%s\n' "${line}" >> "${tmp_file}" ;;
+      esac
+    done < "${ENV_FILE}"
+    cat "${tmp_file}" > "${ENV_FILE}"
+    rm -f "${tmp_file}"
   else
     printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
   fi
