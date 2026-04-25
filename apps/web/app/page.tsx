@@ -1,38 +1,16 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
-type User = {
-  id: number;
-  name: string;
-  email: string;
-};
+type User = { id: number; name: string; email: string };
+type Workspace = { id: number; name: string };
+type Notebook = { id: number; workspace_id: number; name: string };
+type Note = { id: number; notebook_id: number; content: string | null; updated_at?: string };
 
-type Workspace = {
-  id: number;
-  name: string;
-  owner_id?: number;
-};
-
-type Notebook = {
-  id: number;
-  workspace_id: number;
-  name: string;
-  created_at?: string;
-  updated_at?: string;
-};
-
-type AuthResponse = {
-  token: string;
-  user: User;
-  workspace: Workspace | null;
-};
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://187.124.80.32:8000/api";
+const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://187.124.80.32:8000/api";
 
 export default function Home() {
-  const [mode, setMode] = useState<"login" | "register">("register");
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("Victor");
   const [email, setEmail] = useState("victor@test.com");
   const [password, setPassword] = useState("password123");
@@ -40,486 +18,57 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
-  const [notebookName, setNotebookName] = useState("My Secure Notebook");
+  const [notebookName, setNotebookName] = useState("New Notebook");
+  const [activeNotebook, setActiveNotebook] = useState<Notebook | null>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [activeNote, setActiveNote] = useState<Note | null>(null);
+  const [content, setContent] = useState("");
   const [status, setStatus] = useState("Ready");
   const [error, setError] = useState("");
 
-  const isAuthed = Boolean(token);
+  const headers = token ? { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` } : { Accept: "application/json", "Content-Type": "application/json" };
 
-  const authHeaders = useMemo(
-    () => ({
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    }),
-    [token]
-  );
-
+  useEffect(() => { const saved = localStorage.getItem("obscribe_token"); if (saved) setToken(saved); }, []);
+  useEffect(() => { if (token) { loadMe(); loadNotebooks(); } }, [token]);
+  useEffect(() => { if (activeNotebook) loadNotes(activeNotebook.id); }, [activeNotebook?.id]);
+  useEffect(() => { setContent(activeNote?.content || ""); }, [activeNote?.id]);
   useEffect(() => {
-    const savedToken = window.localStorage.getItem("obscribe_token");
+    if (!activeNote) return;
+    const timer = setTimeout(() => { if ((activeNote.content || "") !== content) saveNote(content); }, 1000);
+    return () => clearTimeout(timer);
+  }, [content, activeNote?.id]);
 
-    if (savedToken) {
-      setToken(savedToken);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (token) {
-      fetchMe(token);
-      fetchNotebooks(token);
-    }
-  }, [token]);
-
-  async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
     setError("");
+    const res = await fetch(API + path, { ...options, headers: { ...headers, ...(options.headers || {}) } });
+    const text = await res.text();
+    let data: any = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { throw new Error("Server returned HTML instead of JSON. Check Laravel logs."); }
+    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+    return data;
+  }
 
-    const response = await fetch(`${API_BASE}${path}`, {
-      ...options,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
-    });
-
-    const text = await response.text();
-    let data: unknown = null;
-
+  async function auth(e: FormEvent) {
+    e.preventDefault();
     try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      throw new Error(
-        `Server returned non-JSON response. HTTP ${response.status}. Check Laravel logs.`
-      );
-    }
-
-    if (!response.ok) {
-      const message =
-        typeof data === "object" && data && "message" in data
-          ? String((data as { message: string }).message)
-          : `Request failed with HTTP ${response.status}`;
-      throw new Error(message);
-    }
-
-    return data as T;
+      const body = mode === "register" ? { name, email, password } : { email, password };
+      const data = await api<{ token: string; user: User; workspace: Workspace | null }>(`/${mode}`, { method: "POST", body: JSON.stringify(body) });
+      localStorage.setItem("obscribe_token", data.token);
+      setToken(data.token); setUser(data.user); setWorkspace(data.workspace); setStatus("Logged in");
+    } catch (err) { setError(err instanceof Error ? err.message : "Auth failed"); }
   }
 
-  async function handleAuth(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus(mode === "register" ? "Registering..." : "Logging in...");
+  async function loadMe() { const data = await api<{ user: User; workspace: Workspace | null }>("/me"); setUser(data.user); setWorkspace(data.workspace); }
+  async function loadNotebooks() { const data = await api<{ notebooks: Notebook[] }>("/notebooks"); setNotebooks(data.notebooks); if (!activeNotebook && data.notebooks[0]) setActiveNotebook(data.notebooks[0]); }
+  async function createNotebook(e: FormEvent) { e.preventDefault(); const nb = await api<Notebook>("/notebooks", { method: "POST", body: JSON.stringify({ name: notebookName }) }); setNotebookName(""); setActiveNotebook(nb); await loadNotebooks(); }
+  async function loadNotes(id: number) { const data = await api<{ notes: Note[] }>(`/notebooks/${id}/notes`); setNotes(data.notes); setActiveNote(data.notes[0] || null); }
+  async function createNote() { if (!activeNotebook) return; const note = await api<Note>(`/notebooks/${activeNotebook.id}/notes`, { method: "POST" }); setNotes([note, ...notes]); setActiveNote(note); setStatus("Note created"); }
+  async function saveNote(value: string) { if (!activeNote) return; setStatus("Saving..."); const note = await api<Note>(`/notes/${activeNote.id}`, { method: "PUT", body: JSON.stringify({ content: value }) }); setActiveNote(note); setNotes(notes.map((n) => n.id === note.id ? note : n)); setStatus("Saved"); }
+  function logout() { localStorage.removeItem("obscribe_token"); location.reload(); }
 
-    try {
-      const payload =
-        mode === "register" ? { name, email, password } : { email, password };
+  if (!token) return <main style={s.page}><section style={s.card}><h1>Obscribe</h1><p>Secure notebook platform</p><div style={s.tabs}><button onClick={() => setMode("login")}>Login</button><button onClick={() => setMode("register")}>Register</button></div>{error && <p style={s.error}>{error}</p>}<form onSubmit={auth} style={s.form}>{mode === "register" && <input style={s.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />}<input style={s.input} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" /><input style={s.input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" /><button style={s.primary}>{mode}</button></form></section></main>;
 
-      const data = await request<AuthResponse>(`/${mode}`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-
-      window.localStorage.setItem("obscribe_token", data.token);
-      setToken(data.token);
-      setUser(data.user);
-      setWorkspace(data.workspace);
-      setStatus("Authenticated");
-    } catch (err) {
-      setStatus("Auth failed");
-      setError(err instanceof Error ? err.message : "Unknown auth error");
-    }
-  }
-
-  async function fetchMe(activeToken = token) {
-    if (!activeToken) return;
-
-    try {
-      const data = await request<{ user: User; workspace: Workspace | null }>(
-        "/me",
-        {
-          headers: {
-            Authorization: `Bearer ${activeToken}`,
-          },
-        }
-      );
-
-      setUser(data.user);
-      setWorkspace(data.workspace);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load user");
-    }
-  }
-
-  async function fetchNotebooks(activeToken = token) {
-    if (!activeToken) return;
-
-    try {
-      const data = await request<{ notebooks: Notebook[] }>("/notebooks", {
-        headers: {
-          Authorization: `Bearer ${activeToken}`,
-        },
-      });
-
-      setNotebooks(data.notebooks);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load notebooks");
-    }
-  }
-
-  async function createNotebook(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("Creating notebook...");
-
-    try {
-      await request<Notebook>("/notebooks", {
-        method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify({ name: notebookName }),
-      });
-
-      setNotebookName("");
-      await fetchNotebooks();
-      setStatus("Notebook created");
-    } catch (err) {
-      setStatus("Create failed");
-      setError(err instanceof Error ? err.message : "Could not create notebook");
-    }
-  }
-
-  function logout() {
-    window.localStorage.removeItem("obscribe_token");
-    setToken("");
-    setUser(null);
-    setWorkspace(null);
-    setNotebooks([]);
-    setStatus("Logged out");
-  }
-
-  return (
-    <main style={styles.page}>
-      <section style={styles.hero}>
-        <div>
-          <p style={styles.eyebrow}>Obscribe</p>
-          <h1 style={styles.title}>Secure notebook platform</h1>
-          <p style={styles.subtitle}>
-            Self-hosted first, SaaS-ready later. This dev build tests Laravel auth,
-            workspace scoping, and notebook creation from the browser.
-          </p>
-        </div>
-        <div style={styles.statusBox}>
-          <strong>Status</strong>
-          <span>{status}</span>
-        </div>
-      </section>
-
-      {error ? <div style={styles.error}>{error}</div> : null}
-
-      {!isAuthed ? (
-        <section style={styles.card}>
-          <div style={styles.tabs}>
-            <button
-              onClick={() => setMode("register")}
-              style={mode === "register" ? styles.activeTab : styles.tab}
-            >
-              Register
-            </button>
-            <button
-              onClick={() => setMode("login")}
-              style={mode === "login" ? styles.activeTab : styles.tab}
-            >
-              Login
-            </button>
-          </div>
-
-          <form onSubmit={handleAuth} style={styles.form}>
-            {mode === "register" ? (
-              <label style={styles.label}>
-                Name
-                <input
-                  style={styles.input}
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  required
-                />
-              </label>
-            ) : null}
-
-            <label style={styles.label}>
-              Email
-              <input
-                style={styles.input}
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              Password
-              <input
-                style={styles.input}
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                minLength={8}
-              />
-            </label>
-
-            <button style={styles.primaryButton} type="submit">
-              {mode === "register" ? "Create account" : "Log in"}
-            </button>
-          </form>
-        </section>
-      ) : (
-        <section style={styles.grid}>
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div>
-                <p style={styles.eyebrow}>Dashboard</p>
-                <h2 style={styles.cardTitle}>Account</h2>
-              </div>
-              <button style={styles.secondaryButton} onClick={logout}>
-                Log out
-              </button>
-            </div>
-
-            <div style={styles.detailList}>
-              <div>
-                <strong>User</strong>
-                <span>{user ? `${user.name} (${user.email})` : "Loading..."}</span>
-              </div>
-              <div>
-                <strong>Workspace</strong>
-                <span>{workspace ? workspace.name : "No workspace found"}</span>
-              </div>
-              <div>
-                <strong>Token</strong>
-                <span style={styles.token}>{token.slice(0, 32)}...</span>
-              </div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div>
-                <p style={styles.eyebrow}>Notebooks</p>
-                <h2 style={styles.cardTitle}>Create notebook</h2>
-              </div>
-              <button style={styles.secondaryButton} onClick={() => fetchNotebooks()}>
-                Refresh
-              </button>
-            </div>
-
-            <form onSubmit={createNotebook} style={styles.inlineForm}>
-              <input
-                style={styles.input}
-                placeholder="Notebook name"
-                value={notebookName}
-                onChange={(event) => setNotebookName(event.target.value)}
-                required
-              />
-              <button style={styles.primaryButton} type="submit">
-                Create
-              </button>
-            </form>
-
-            <div style={styles.notebookList}>
-              {notebooks.length === 0 ? (
-                <p style={styles.empty}>No notebooks yet.</p>
-              ) : (
-                notebooks.map((notebook) => (
-                  <article key={notebook.id} style={styles.notebookItem}>
-                    <strong>{notebook.name}</strong>
-                    <span>Workspace #{notebook.workspace_id}</span>
-                  </article>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-    </main>
-  );
+  return <main style={s.page}><header style={s.header}><div><h1>Obscribe</h1><p>{workspace?.name} · {user?.email} · {status}</p></div><button onClick={logout} style={s.secondary}>Logout</button></header>{error && <p style={s.error}>{error}</p>}<section style={s.shell}><aside style={s.panel}><h2>Notebooks</h2><form onSubmit={createNotebook} style={s.row}><input style={s.input} value={notebookName} onChange={(e) => setNotebookName(e.target.value)} placeholder="Notebook name" /><button style={s.primary}>Add</button></form>{notebooks.map((nb) => <button key={nb.id} onClick={() => setActiveNotebook(nb)} style={activeNotebook?.id === nb.id ? s.activeItem : s.item}>{nb.name}</button>)}</aside><aside style={s.panel}><h2>Notes</h2><button onClick={createNote} style={s.primary} disabled={!activeNotebook}>New note</button>{notes.map((note) => <button key={note.id} onClick={() => setActiveNote(note)} style={activeNote?.id === note.id ? s.activeItem : s.item}>{(note.content || "Untitled note").slice(0, 50)}</button>)}</aside><section style={s.editorPanel}>{activeNote ? <><h2>Editor</h2><textarea style={s.editor} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Start writing..." /><button onClick={() => saveNote(content)} style={s.secondary}>Save now</button></> : <div style={s.empty}><h2>Select or create a note</h2><p>Your note editor will appear here.</p></div>}</section></section></main>;
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#f6f3ee",
-    color: "#171717",
-    padding: 32,
-    fontFamily:
-      'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  },
-  hero: {
-    maxWidth: 1120,
-    margin: "0 auto 24px",
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: 24,
-  },
-  eyebrow: {
-    margin: 0,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#6b6258",
-  },
-  title: {
-    margin: "8px 0",
-    fontSize: 48,
-    lineHeight: 1,
-  },
-  subtitle: {
-    margin: 0,
-    maxWidth: 680,
-    color: "#5f5a54",
-    fontSize: 17,
-    lineHeight: 1.6,
-  },
-  statusBox: {
-    background: "#ffffff",
-    border: "1px solid #e4ddd3",
-    borderRadius: 16,
-    padding: 16,
-    minWidth: 180,
-    display: "grid",
-    gap: 6,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-  },
-  error: {
-    maxWidth: 1120,
-    margin: "0 auto 24px",
-    background: "#fff1f1",
-    color: "#9f1239",
-    border: "1px solid #fecdd3",
-    borderRadius: 14,
-    padding: 16,
-  },
-  grid: {
-    maxWidth: 1120,
-    margin: "0 auto",
-    display: "grid",
-    gridTemplateColumns: "1fr 1.2fr",
-    gap: 24,
-  },
-  card: {
-    maxWidth: 720,
-    margin: "0 auto",
-    width: "100%",
-    background: "#ffffff",
-    border: "1px solid #e4ddd3",
-    borderRadius: 20,
-    padding: 24,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-  },
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 16,
-    marginBottom: 20,
-  },
-  cardTitle: {
-    margin: "4px 0 0",
-    fontSize: 24,
-  },
-  tabs: {
-    display: "flex",
-    gap: 8,
-    background: "#f4efe7",
-    borderRadius: 14,
-    padding: 6,
-    marginBottom: 20,
-  },
-  tab: {
-    flex: 1,
-    border: 0,
-    borderRadius: 10,
-    background: "transparent",
-    padding: "12px 16px",
-    cursor: "pointer",
-    fontWeight: 700,
-  },
-  activeTab: {
-    flex: 1,
-    border: 0,
-    borderRadius: 10,
-    background: "#171717",
-    color: "#ffffff",
-    padding: "12px 16px",
-    cursor: "pointer",
-    fontWeight: 700,
-  },
-  form: {
-    display: "grid",
-    gap: 16,
-  },
-  inlineForm: {
-    display: "grid",
-    gridTemplateColumns: "1fr auto",
-    gap: 12,
-    marginBottom: 20,
-  },
-  label: {
-    display: "grid",
-    gap: 8,
-    fontWeight: 700,
-  },
-  input: {
-    width: "100%",
-    boxSizing: "border-box",
-    border: "1px solid #d6cec2",
-    borderRadius: 12,
-    padding: "13px 14px",
-    fontSize: 16,
-    outline: "none",
-  },
-  primaryButton: {
-    border: 0,
-    borderRadius: 12,
-    background: "#171717",
-    color: "#ffffff",
-    padding: "13px 18px",
-    fontSize: 16,
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-  secondaryButton: {
-    border: "1px solid #d6cec2",
-    borderRadius: 12,
-    background: "#ffffff",
-    padding: "10px 14px",
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-  detailList: {
-    display: "grid",
-    gap: 14,
-  },
-  token: {
-    display: "block",
-    maxWidth: 320,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    color: "#5f5a54",
-  },
-  notebookList: {
-    display: "grid",
-    gap: 12,
-  },
-  notebookItem: {
-    border: "1px solid #ece5db",
-    borderRadius: 14,
-    padding: 16,
-    display: "grid",
-    gap: 6,
-    background: "#fbfaf7",
-  },
-  empty: {
-    color: "#6b6258",
-  },
-};
+const s: Record<string, React.CSSProperties> = { page:{minHeight:"100vh",padding:28,background:"#f6f3ee",fontFamily:"system-ui",color:"#171717"}, header:{maxWidth:1300,margin:"0 auto 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}, card:{maxWidth:520,margin:"80px auto",background:"white",border:"1px solid #e4ddd3",borderRadius:20,padding:24}, tabs:{display:"flex",gap:10,margin:"18px 0"}, form:{display:"grid",gap:12}, input:{border:"1px solid #d6cec2",borderRadius:12,padding:12,fontSize:15}, primary:{border:0,borderRadius:12,padding:"12px 14px",background:"#171717",color:"white",fontWeight:800,cursor:"pointer"}, secondary:{border:"1px solid #d6cec2",borderRadius:12,padding:"10px 14px",background:"white",fontWeight:800,cursor:"pointer"}, error:{maxWidth:1300,margin:"0 auto 16px",background:"#fff1f1",color:"#9f1239",border:"1px solid #fecdd3",borderRadius:12,padding:12}, shell:{maxWidth:1300,margin:"0 auto",display:"grid",gridTemplateColumns:"260px 260px 1fr",gap:16,height:"74vh"}, panel:{background:"white",border:"1px solid #e4ddd3",borderRadius:18,padding:16,overflow:"auto",display:"grid",alignContent:"start",gap:10}, row:{display:"grid",gridTemplateColumns:"1fr auto",gap:8}, item:{textAlign:"left",border:"1px solid #eee",borderRadius:12,padding:12,background:"#fbfaf7",cursor:"pointer"}, activeItem:{textAlign:"left",border:"1px solid #171717",borderRadius:12,padding:12,background:"#171717",color:"white",cursor:"pointer"}, editorPanel:{background:"white",border:"1px solid #e4ddd3",borderRadius:18,padding:18,display:"flex",flexDirection:"column",gap:12}, editor:{flex:1,width:"100%",resize:"none",boxSizing:"border-box",border:"1px solid #e4ddd3",borderRadius:14,padding:18,fontSize:17,lineHeight:1.7}, empty:{margin:"auto",textAlign:"center",color:"#6b6258"} };
