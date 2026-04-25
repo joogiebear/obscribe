@@ -657,19 +657,24 @@ export default function Home() {
     }
   }
 
-  async function createNotebookNamed(value: string, templateKey: NotebookTemplateKey | "" = "") {
+  async function createNotebookRecord(value: string, templateKey: NotebookTemplateKey | "" = "") {
     const template = NOTEBOOK_TEMPLATES.find((item) => item.key === templateKey);
     const name = value.trim() || template?.name || "";
-    if (!name) return;
+    if (!name) return null;
 
+    return api<Notebook>("/notebooks", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        ...(templateKey ? { template_key: templateKey } : {}),
+      }),
+    });
+  }
+
+  async function createNotebookNamed(value: string, templateKey: NotebookTemplateKey | "" = "") {
     try {
-      const notebook = await api<Notebook>("/notebooks", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          ...(templateKey ? { template_key: templateKey } : {}),
-        }),
-      });
+      const notebook = await createNotebookRecord(value, templateKey);
+      if (!notebook) return;
       setNotebookName("");
       setSelectedTemplateId("");
       setActiveNotebook(notebook);
@@ -687,18 +692,21 @@ export default function Home() {
     await createNotebookNamed(notebookName);
   }
 
-  async function createNote(initialContent = "") {
-    if (!activeNotebook) return;
+  async function createNote(initialContent = "", targetNotebook = activeNotebook) {
+    if (!targetNotebook) return;
 
     try {
-      const note = await api<Note>(`/notebooks/${activeNotebook.id}/notes`, {
+      const switchingNotebooks = activeNotebook?.id !== targetNotebook.id;
+      const note = await api<Note>(`/notebooks/${targetNotebook.id}/notes`, {
         method: "POST",
         body: JSON.stringify({ content: initialContent }),
       });
-      setNotes((current) => [note, ...current]);
+      if (switchingNotebooks) targetNoteIdRef.current = note.id;
+      setActiveNotebook(targetNotebook);
+      setNotes((current) => (switchingNotebooks ? [note] : [note, ...current]));
       setActiveNote(note);
       setMobilePane("editor");
-      setStatus(initialContent ? "Note template created" : "Note created");
+      setStatus(initialContent ? `Template added to ${targetNotebook.name}` : "Note created");
       window.setTimeout(() => (initialContent ? editorRef.current?.focus() : titleInputRef.current?.focus()), 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create note");
@@ -711,13 +719,23 @@ export default function Home() {
       return;
     }
 
-    if (!activeNotebook) {
-      setError("Choose a notebook before using a note template.");
-      setMobilePane("notebooks");
+    let targetNotebook: Notebook | null = activeNotebook ?? notebooks[0] ?? null;
+
+    try {
+      if (!targetNotebook) {
+        const quickNotebook = await createNotebookRecord("Quick Notes");
+        if (!quickNotebook) return;
+        targetNotebook = quickNotebook;
+        setNotebooks((current) => [quickNotebook, ...current]);
+        setNotebooksLoaded(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create notebook");
+      setNotebooksLoaded(true);
       return;
     }
 
-    await createNote(template.content);
+    await createNote(template.content, targetNotebook);
   }
 
   async function deleteActiveNote() {
@@ -1538,14 +1556,13 @@ export default function Home() {
                     const TemplateIcon = template.icon;
                     const id = templateId(template);
                     const isSelected = selectedTemplateId === id;
-                    const disabled = template.type === "note" && !activeNotebook;
                     return (
                       <div
                         key={id}
                         className={isSelected ? "templateResultActive" : "templateResult"}
                         onClick={() => setSelectedTemplateId(id)}
                         onDoubleClick={() => useTemplate(template)}
-                        title={template.type === "note" ? "Use in the current notebook" : "Create this notebook system"}
+                        title="Use this template"
                       >
                         <TemplateIcon size={15} strokeWidth={2.2} />
                         <div className="templateResultCopy">
@@ -1558,10 +1575,9 @@ export default function Home() {
                             event.stopPropagation();
                             useTemplate(template);
                           }}
-                          disabled={disabled}
                           type="button"
                         >
-                          {disabled ? "Select notebook" : "Use"}
+                          Use
                         </button>
                       </div>
                     );
@@ -1574,10 +1590,9 @@ export default function Home() {
                     <p>{selectedTemplate.details}</p>
                     <button
                       onClick={() => useTemplate(selectedTemplate)}
-                      disabled={selectedTemplate.type === "note" && !activeNotebook}
                       type="button"
                     >
-                      {selectedTemplate.type === "note" && !activeNotebook ? "Select notebook first" : "Use template"}
+                      Use template
                     </button>
                   </div>
                 )}

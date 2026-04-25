@@ -1034,12 +1034,6 @@ textarea:focus-visible {
   color: var(--ink);
 }
 
-.templateResult > button:disabled,
-.templateResultActive > button:disabled,
-.templatePreview button:disabled {
-  white-space: nowrap;
-}
-
 .templatePreview {
   display: grid;
   gap: 7px;
