@@ -74,9 +74,13 @@ textarea:focus-visible {
 .loginPage {
   min-height: 100svh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 510px);
+  grid-template-columns: minmax(360px, 620px) minmax(360px, 440px);
+  justify-content: center;
+  align-items: center;
+  column-gap: clamp(36px, 6vw, 88px);
   min-width: 0;
   overflow-x: hidden;
+  padding: 0 clamp(28px, 5vw, 76px);
   background:
     linear-gradient(90deg, rgba(10, 24, 22, 0.94), rgba(15, 57, 51, 0.74)),
     url("https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1800&q=80");
@@ -85,11 +89,10 @@ textarea:focus-visible {
 }
 
 .loginStory {
-  align-self: end;
   min-width: 0;
   width: 100%;
-  max-width: 760px;
-  padding: 72px;
+  max-width: 620px;
+  padding: 0;
   color: #fff;
 }
 
@@ -115,7 +118,7 @@ textarea:focus-visible {
 .heroWord {
   margin: 12px 0 14px;
   color: #fff;
-  font-size: clamp(58px, 8vw, 112px);
+  font-size: 88px;
   line-height: 0.92;
   font-weight: 800;
   letter-spacing: 0;
@@ -156,17 +159,17 @@ textarea:focus-visible {
 }
 
 .loginCard {
-  align-self: stretch;
   min-width: 0;
   width: 100%;
+  max-width: 440px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 100svh;
-  padding: 48px 54px;
+  padding: 48px;
   background: rgba(251, 250, 246, 0.97);
-  border-left: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: -34px 0 80px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 12px;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.2);
 }
 
 .mark {
@@ -1671,16 +1674,22 @@ small {
 @media (max-width: 1060px) {
   .loginPage {
     grid-template-columns: 1fr;
+    align-content: center;
+    justify-items: center;
+    gap: 22px;
+    padding: 30px 18px;
   }
 
   .loginStory {
-    min-height: 38svh;
-    align-self: stretch;
+    width: min(100%, 520px);
+    min-height: auto;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    max-width: none;
-    padding: 34px;
+    align-items: center;
+    justify-content: center;
+    max-width: 520px;
+    padding: 0;
+    text-align: center;
   }
 
   .heroWord {
@@ -1689,9 +1698,13 @@ small {
 
   .loginCard {
     min-height: auto;
-    max-width: none;
+    width: min(100%, 430px);
+    max-width: 430px;
     padding: 32px;
-    border-left: 0;
+  }
+
+  .trustList {
+    justify-content: center;
   }
 
   .page {
@@ -1897,10 +1910,14 @@ small {
 }
 
 @media (max-width: 520px) {
+  .loginPage {
+    gap: 20px;
+    padding: 24px 16px;
+  }
+
   .loginStory {
-    min-height: 36svh;
+    width: min(100%, 390px);
     max-width: 390px;
-    padding: 30px 22px;
   }
 
   .heroMark {
@@ -1921,7 +1938,8 @@ small {
   .trustList {
     display: grid;
     grid-template-columns: 1fr;
-    max-width: 220px;
+    justify-items: center;
+    max-width: 240px;
     gap: 8px;
   }
 
@@ -1932,8 +1950,9 @@ small {
   }
 
   .loginCard {
+    width: min(100%, 390px);
     max-width: 390px;
-    padding: 30px 22px;
+    padding: 28px 20px;
   }
 
   .loginTitle {
