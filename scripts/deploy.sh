@@ -5,6 +5,99 @@ REPO_URL="${OBSCRIBE_REPO_URL:-https://github.com/joogiebear/obscribe.git}"
 REPO_REF="${OBSCRIBE_REPO_REF:-main}"
 INSTALL_DIR="${OBSCRIBE_HOME:-/opt/obscribe}"
 
+run_as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    echo "This installer needs root privileges. Re-run as root or install sudo."
+    exit 1
+  fi
+}
+
+require_apt() {
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "Automatic dependency installation currently supports Ubuntu/Debian servers with apt."
+    echo "Install git, Docker Engine, and the Docker Compose v2 plugin, then run this installer again."
+    exit 1
+  fi
+}
+
+apt_install() {
+  require_apt
+  run_as_root apt-get update
+  run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+
+ensure_git() {
+  if command -v git >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Installing Git..."
+  apt_install ca-certificates curl gnupg git
+}
+
+ensure_docker() {
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    return
+  fi
+
+  require_apt
+
+  if [ ! -f /etc/os-release ]; then
+    echo "Cannot detect this server's Linux distribution."
+    exit 1
+  fi
+
+  . /etc/os-release
+
+  if [ "${ID:-}" != "ubuntu" ] && [ "${ID:-}" != "debian" ]; then
+    echo "Automatic Docker installation currently supports Ubuntu and Debian."
+    echo "Detected: ${ID:-unknown}. Install Docker Engine and Docker Compose v2, then run again."
+    exit 1
+  fi
+
+  CODENAME="${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
+  if [ -z "${CODENAME}" ]; then
+    echo "Cannot detect OS codename for Docker repository setup."
+    exit 1
+  fi
+
+  echo "Installing Docker Engine and Docker Compose..."
+  apt_install ca-certificates curl gnupg lsb-release
+  run_as_root install -m 0755 -d /etc/apt/keyrings
+
+  if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
+    curl -fsSL "https://download.docker.com/linux/${ID}/gpg" | run_as_root gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    run_as_root chmod a+r /etc/apt/keyrings/docker.gpg
+  fi
+
+  ARCH="$(dpkg --print-architecture)"
+  echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${ID} ${CODENAME} stable" \
+    | run_as_root tee /etc/apt/sources.list.d/docker.list >/dev/null
+
+  run_as_root apt-get update
+  run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    docker-ce \
+    docker-ce-cli \
+    containerd.io \
+    docker-buildx-plugin \
+    docker-compose-plugin
+
+  if command -v systemctl >/dev/null 2>&1; then
+    run_as_root systemctl enable --now docker || true
+  else
+    run_as_root service docker start || true
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    echo "Docker installation did not complete correctly. Check the package output above."
+    exit 1
+  fi
+}
+
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 if [ -f "${SCRIPT_PATH}" ]; then
   ROOT_DIR="$(cd "$(dirname "${SCRIPT_PATH}")/.." && pwd)"
@@ -13,10 +106,7 @@ else
 fi
 
 if [ ! -f "${ROOT_DIR}/docker-compose.prod.yml" ]; then
-  if ! command -v git >/dev/null 2>&1; then
-    echo "Git is required for the GitHub-hosted installer. Install git and run again."
-    exit 1
-  fi
+  ensure_git
 
   if [ -d "${INSTALL_DIR}/.git" ]; then
     echo "Updating Obscribe in ${INSTALL_DIR}..."
@@ -78,15 +168,7 @@ domain_to_mail_from() {
   fi
 }
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker is required. Install Docker Engine and run this script again."
-  exit 1
-fi
-
-if ! docker compose version >/dev/null 2>&1; then
-  echo "Docker Compose v2 is required. Install the Docker compose plugin and run this script again."
-  exit 1
-fi
+ensure_docker
 
 if [ ! -f "${ENV_FILE}" ]; then
   cp "${ROOT_DIR}/.env.example" "${ENV_FILE}"

@@ -22,13 +22,13 @@ Open `http://localhost:3000`.
 
 ## Single-Server Self-Host Install
 
-On an Ubuntu server with Docker Engine and Docker Compose v2:
+On a fresh Ubuntu or Debian server:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh | bash
 ```
 
-The installer clones Obscribe into `/opt/obscribe`, creates `.env` from `.env.example`, generates database and object-storage secrets, builds the containers, and starts the stack.
+The installer installs Git, Docker Engine, and Docker Compose v2 when needed. It then clones Obscribe into `/opt/obscribe`, creates `.env` from `.env.example`, generates database and object-storage secrets, builds the containers, and starts the stack.
 
 For an interactive first install, run:
 
