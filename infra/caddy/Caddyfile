@@ -4,6 +4,12 @@
 
 {$APP_DOMAIN} {
     encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
 
     handle_path /api/* {
         reverse_proxy api:8000

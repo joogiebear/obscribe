@@ -4,19 +4,6 @@ declare(strict_types=1);
 
 header('Content-Type: application/json');
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if ($origin !== '') {
-    header("Access-Control-Allow-Origin: {$origin}");
-    header('Vary: Origin');
-}
-header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept');
-header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
 function json_response(mixed $payload, int $status = 200): never
 {
     http_response_code($status);
@@ -29,6 +16,59 @@ function env_value(string $key, ?string $default = null): ?string
     $value = getenv($key);
     return $value === false ? $default : $value;
 }
+
+function origin_from_url(?string $url): ?string
+{
+    if (!$url) {
+        return null;
+    }
+
+    $scheme = parse_url($url, PHP_URL_SCHEME);
+    $host = parse_url($url, PHP_URL_HOST);
+    $port = parse_url($url, PHP_URL_PORT);
+
+    if (!$scheme || !$host) {
+        return null;
+    }
+
+    $origin = "{$scheme}://{$host}";
+    if ($port) {
+        $origin .= ":{$port}";
+    }
+
+    return $origin;
+}
+
+function configure_cors(): void
+{
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    $allowed = array_filter(array_unique([
+        origin_from_url(env_value('APP_URL')),
+        origin_from_url(env_value('NEXT_PUBLIC_APP_URL')),
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]));
+
+    if ($origin !== '') {
+        header('Vary: Origin');
+        if (in_array($origin, $allowed, true)) {
+            header("Access-Control-Allow-Origin: {$origin}");
+        } elseif (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
+            http_response_code(403);
+            exit;
+        }
+    }
+
+    header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
+        http_response_code(204);
+        exit;
+    }
+}
+
+configure_cors();
 
 function header_safe(string $value): string
 {
