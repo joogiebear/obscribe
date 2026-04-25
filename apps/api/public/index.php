@@ -30,6 +30,136 @@ function env_value(string $key, ?string $default = null): ?string
     return $value === false ? $default : $value;
 }
 
+function header_safe(string $value): string
+{
+    return trim(str_replace(["\r", "\n"], '', $value));
+}
+
+function smtp_read_response($socket): array
+{
+    $lines = [];
+
+    while (($line = fgets($socket, 515)) !== false) {
+        $lines[] = rtrim($line, "\r\n");
+        if (strlen($line) >= 4 && $line[3] === ' ') {
+            break;
+        }
+    }
+
+    $last = end($lines) ?: '000 SMTP response missing';
+    return [(int) substr($last, 0, 3), implode("\n", $lines)];
+}
+
+function smtp_command($socket, string $command, array $expected): string
+{
+    fwrite($socket, $command . "\r\n");
+    [$code, $response] = smtp_read_response($socket);
+
+    if (!in_array($code, $expected, true)) {
+        throw new RuntimeException("SMTP command failed: {$response}");
+    }
+
+    return $response;
+}
+
+function smtp_send_message(string $to, string $subject, string $body): void
+{
+    $host = env_value('MAIL_HOST', '');
+    if (!$host) {
+        throw new RuntimeException('MAIL_HOST is not configured.');
+    }
+
+    $port = (int) env_value('MAIL_PORT', '587');
+    $username = env_value('MAIL_USERNAME', '');
+    $password = env_value('MAIL_PASSWORD', '');
+    $encryption = strtolower((string) env_value('MAIL_ENCRYPTION', 'tls'));
+    $fromAddress = header_safe((string) env_value('MAIL_FROM_ADDRESS', 'no-reply@obscribe.local'));
+    $fromName = header_safe((string) env_value('MAIL_FROM_NAME', 'Obscribe'));
+    $transport = $encryption === 'ssl' ? "ssl://{$host}" : $host;
+
+    $socket = stream_socket_client(
+        "{$transport}:{$port}",
+        $errno,
+        $errstr,
+        20,
+        STREAM_CLIENT_CONNECT,
+    );
+
+    if (!$socket) {
+        throw new RuntimeException("Unable to connect to SMTP server: {$errstr}");
+    }
+
+    stream_set_timeout($socket, 20);
+    [$code, $response] = smtp_read_response($socket);
+    if ($code !== 220) {
+        fclose($socket);
+        throw new RuntimeException("SMTP greeting failed: {$response}");
+    }
+
+    try {
+        $serverName = parse_url((string) env_value('APP_URL', 'http://localhost'), PHP_URL_HOST) ?: 'obscribe.local';
+        smtp_command($socket, "EHLO {$serverName}", [250]);
+
+        if ($encryption === 'tls') {
+            smtp_command($socket, 'STARTTLS', [220]);
+            if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                throw new RuntimeException('Unable to start SMTP TLS encryption.');
+            }
+            smtp_command($socket, "EHLO {$serverName}", [250]);
+        }
+
+        if ($username !== '') {
+            smtp_command($socket, 'AUTH LOGIN', [334]);
+            smtp_command($socket, base64_encode($username), [334]);
+            smtp_command($socket, base64_encode((string) $password), [235]);
+        }
+
+        smtp_command($socket, "MAIL FROM:<{$fromAddress}>", [250]);
+        smtp_command($socket, "RCPT TO:<{$to}>", [250, 251]);
+        smtp_command($socket, 'DATA', [354]);
+
+        $headers = [
+            "From: {$fromName} <{$fromAddress}>",
+            "To: <" . header_safe($to) . ">",
+            'Subject: ' . header_safe($subject),
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=UTF-8',
+        ];
+        $message = implode("\r\n", $headers) . "\r\n\r\n" . str_replace("\n.", "\n..", $body);
+        fwrite($socket, $message . "\r\n.\r\n");
+
+        [$dataCode, $dataResponse] = smtp_read_response($socket);
+        if (!in_array($dataCode, [250], true)) {
+            throw new RuntimeException("SMTP message failed: {$dataResponse}");
+        }
+
+        smtp_command($socket, 'QUIT', [221]);
+    } finally {
+        fclose($socket);
+    }
+}
+
+function send_welcome_email(array $user): array
+{
+    $mailer = strtolower((string) env_value('MAIL_MAILER', 'log'));
+    $subject = 'Welcome to Obscribe';
+    $body = "Hi {$user['name']},\n\nYour Obscribe workspace is ready.\n\n" .
+        "Open " . env_value('APP_URL', 'http://localhost') . " to start writing.\n";
+
+    if ($mailer !== 'smtp') {
+        error_log("Mail log: {$subject} -> {$user['email']}");
+        return ['sent' => false, 'driver' => $mailer, 'message' => 'Mail is using the log driver.'];
+    }
+
+    try {
+        smtp_send_message($user['email'], $subject, $body);
+        return ['sent' => true, 'driver' => 'smtp'];
+    } catch (Throwable $exception) {
+        error_log('SMTP send failed: ' . $exception->getMessage());
+        return ['sent' => false, 'driver' => 'smtp', 'message' => 'SMTP send failed. Check API logs.'];
+    }
+}
+
 function db(): PDO
 {
     static $pdo = null;
@@ -304,10 +434,13 @@ try {
 
         $pdo->commit();
 
+        $mail = send_welcome_email($user);
+
         json_response([
             'token' => issue_token((int) $user['id']),
             'user' => public_user($user),
             'workspace' => ['id' => (int) $workspace['id'], 'name' => $workspace['name']],
+            'mail' => $mail,
         ], 201);
     }
 

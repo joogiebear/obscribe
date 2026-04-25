@@ -57,6 +57,28 @@ OBSCRIBE_DOMAIN=notes.example.com OBSCRIBE_ACME_EMAIL=admin@example.com \
 
 The SSL email is only used by Caddy/Let's Encrypt for certificate notices. App email is separate and currently defaults to log-only delivery with `MAIL_FROM_ADDRESS=no-reply@your-domain`.
 
+To configure SMTP during an existing install:
+
+```bash
+OBSCRIBE_CONFIGURE_SMTP=1 \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
+```
+
+Or run it non-interactively:
+
+```bash
+OBSCRIBE_SMTP_HOST=smtp.example.com \
+OBSCRIBE_SMTP_PORT=587 \
+OBSCRIBE_SMTP_USERNAME=postmaster@example.com \
+OBSCRIBE_SMTP_PASSWORD='your-password' \
+OBSCRIBE_SMTP_ENCRYPTION=tls \
+OBSCRIBE_MAIL_FROM=no-reply@example.com \
+OBSCRIBE_MAIL_FROM_NAME=Obscribe \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
+```
+
+When SMTP is enabled, new registrations send a welcome email. Password reset and invitation flows will use the same settings when those product flows are added.
+
 Before public launch, confirm `/opt/obscribe/.env`:
 
 ```env
@@ -65,6 +87,14 @@ ACME_EMAIL=admin@example.com
 APP_URL=https://notes.example.com
 NEXT_PUBLIC_APP_URL=https://notes.example.com
 NEXT_PUBLIC_API_BASE_URL=/api
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=postmaster@example.com
+MAIL_PASSWORD=your-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=no-reply@example.com
+MAIL_FROM_NAME=Obscribe
 ```
 
 Then rerun:

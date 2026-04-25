@@ -144,6 +144,35 @@ prompt_value() {
   printf '%s' "${value:-$default}"
 }
 
+prompt_secret() {
+  local prompt="$1"
+  local default="$2"
+  local value=""
+
+  if [ -t 0 ]; then
+    read -r -s -p "${prompt}" value
+    printf '\n'
+  fi
+
+  printf '%s' "${value:-$default}"
+}
+
+yes_no() {
+  local prompt="$1"
+  local default="$2"
+  local value=""
+
+  if [ -t 0 ]; then
+    read -r -p "${prompt} [${default}]: " value
+  fi
+
+  value="${value:-$default}"
+  case "${value}" in
+    y|Y|yes|YES|Yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 set_env_value() {
   local key="$1"
   local value="$2"
@@ -166,6 +195,67 @@ domain_to_mail_from() {
   else
     printf '%s' "no-reply@${domain}"
   fi
+}
+
+get_env_value() {
+  local key="$1"
+  grep "^${key}=" "${ENV_FILE}" | tail -n 1 | cut -d= -f2- || true
+}
+
+configure_smtp() {
+  local should_configure="false"
+
+  if [ -n "${OBSCRIBE_SMTP_HOST:-}" ]; then
+    should_configure="true"
+  elif [ "${OBSCRIBE_CONFIGURE_SMTP:-}" = "1" ]; then
+    should_configure="true"
+  elif [ -t 0 ] && [ "$(get_env_value MAIL_MAILER)" != "smtp" ]; then
+    if yes_no "Configure SMTP email now?" "n"; then
+      should_configure="true"
+    fi
+  fi
+
+  if [ "${should_configure}" != "true" ]; then
+    return
+  fi
+
+  local current_domain
+  local smtp_host
+  local smtp_port
+  local smtp_username
+  local smtp_password
+  local smtp_encryption
+  local mail_from
+  local mail_name
+
+  current_domain="$(get_env_value APP_DOMAIN)"
+  smtp_host="${OBSCRIBE_SMTP_HOST:-$(prompt_value "SMTP host" "$(get_env_value MAIL_HOST)")}"
+  if [ -z "${smtp_host}" ]; then
+    echo "SMTP host was not provided. Leaving mail on the current setting."
+    return
+  fi
+
+  smtp_port="${OBSCRIBE_SMTP_PORT:-$(prompt_value "SMTP port" "$(get_env_value MAIL_PORT)")}"
+  smtp_port="${smtp_port:-587}"
+  smtp_username="${OBSCRIBE_SMTP_USERNAME:-$(prompt_value "SMTP username" "$(get_env_value MAIL_USERNAME)")}"
+  smtp_password="${OBSCRIBE_SMTP_PASSWORD:-$(prompt_secret "SMTP password: " "$(get_env_value MAIL_PASSWORD)")}"
+  smtp_encryption="${OBSCRIBE_SMTP_ENCRYPTION:-$(prompt_value "SMTP encryption (tls, ssl, or none)" "$(get_env_value MAIL_ENCRYPTION)")}"
+  smtp_encryption="${smtp_encryption:-tls}"
+  mail_from="${OBSCRIBE_MAIL_FROM:-$(prompt_value "From email address" "$(get_env_value MAIL_FROM_ADDRESS)")}"
+  mail_from="${mail_from:-$(domain_to_mail_from "${current_domain:-localhost}")}"
+  mail_name="${OBSCRIBE_MAIL_FROM_NAME:-$(prompt_value "From name" "$(get_env_value MAIL_FROM_NAME)")}"
+  mail_name="${mail_name:-Obscribe}"
+
+  set_env_value "MAIL_MAILER" "smtp"
+  set_env_value "MAIL_HOST" "${smtp_host}"
+  set_env_value "MAIL_PORT" "${smtp_port}"
+  set_env_value "MAIL_USERNAME" "${smtp_username}"
+  set_env_value "MAIL_PASSWORD" "${smtp_password}"
+  set_env_value "MAIL_ENCRYPTION" "${smtp_encryption}"
+  set_env_value "MAIL_FROM_ADDRESS" "${mail_from}"
+  set_env_value "MAIL_FROM_NAME" "${mail_name}"
+
+  echo "SMTP settings saved. New registrations will send a welcome email."
 }
 
 ensure_docker
@@ -241,6 +331,8 @@ else
     echo "Updated .env domain settings for ${APP_URL}."
   fi
 fi
+
+configure_smtp
 
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" build
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d
