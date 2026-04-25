@@ -1018,7 +1018,21 @@ export default function Home() {
                 />
               </label>
               <label className="fieldGroup">
-                <span className="fieldLabel">Password</span>
+                <span className="fieldLabelRow">
+                  <span className="fieldLabel">Password</span>
+                  {mode === "login" && (
+                    <button
+                      className="linkButton fieldLink"
+                      onClick={() => {
+                        setResetEmail(email);
+                        switchAuthMode("forgot");
+                      }}
+                      type="button"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </span>
                 <input
                   className="input"
                   type="password"
@@ -1030,11 +1044,6 @@ export default function Home() {
                 />
               </label>
               <button className="primary">{mode === "login" ? "Sign in" : "Create account"}</button>
-              {mode === "login" && (
-                <button className="linkButton" onClick={() => switchAuthMode("forgot")} type="button">
-                  Forgot password?
-                </button>
-              )}
             </form>
           )}
         </section>
@@ -1183,28 +1192,6 @@ export default function Home() {
                 <Mail size={16} strokeWidth={2} />
                 Send test email
               </button>
-            </section>
-
-            <section className="settingsPanel" aria-labelledby="recovery-title">
-              <div className="settingsPanelHeader">
-                <KeyRound size={18} strokeWidth={2} />
-                <div>
-                  <p className="kicker">Recovery</p>
-                  <h3 id="recovery-title">Password recovery</h3>
-                </div>
-              </div>
-              <p className="settingsCopy">
-                Recovery depends on this server's SMTP setup. Send a reset link before you need it.
-              </p>
-              <button
-                onClick={() => sendPasswordReset(user?.email ?? "")}
-                className="secondary"
-                type="button"
-              >
-                <Mail size={16} strokeWidth={2} />
-                Send recovery email
-              </button>
-              {resetStatus && <p className="successText">{resetStatus}</p>}
             </section>
 
             <section className="settingsPanel" aria-labelledby="data-title">

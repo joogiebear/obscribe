@@ -271,10 +271,24 @@ textarea:focus-visible {
   gap: 7px;
 }
 
+.fieldLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .fieldLabel {
   color: var(--ink-soft);
   font-size: 13px;
   font-weight: 700;
+}
+
+.fieldLink {
+  justify-self: end;
+  padding: 0;
+  font-size: 12px;
 }
 
 .input,
