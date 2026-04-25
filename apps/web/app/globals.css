@@ -245,6 +245,22 @@ textarea:focus-visible {
   color: #fff;
 }
 
+.linkButton {
+  justify-self: center;
+  border: 0;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.linkButton:hover {
+  color: var(--brand-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .form {
   display: grid;
   gap: 13px;
@@ -612,6 +628,50 @@ textarea:focus-visible {
   color: var(--brand);
   font-size: 13px;
   font-weight: 750;
+}
+
+.authStatus {
+  margin-bottom: 12px;
+}
+
+.settingsActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.hiddenFile {
+  display: none;
+}
+
+.opsList {
+  display: grid;
+  gap: 10px;
+}
+
+.opsList span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.opsList svg {
+  flex: 0 0 auto;
+}
+
+.opsReady svg {
+  color: var(--brand);
+}
+
+.opsMuted {
+  color: var(--muted);
+}
+
+.opsMuted svg {
+  color: var(--faint);
 }
 
 .settingsTitle {
@@ -1031,6 +1091,8 @@ small {
 
 .titleInput,
 .editor,
+.editorToolbar,
+.markdownPreview,
 .editorFooter {
   width: min(800px, calc(100% - 72px));
   align-self: center;
@@ -1054,6 +1116,61 @@ small {
   color: #a7b0aa;
 }
 
+.editorToolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 42px;
+  margin-bottom: 14px;
+  padding: 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(247, 247, 242, 0.82);
+}
+
+.editorToolbar > button,
+.editorModeToggle button {
+  min-width: 32px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.editorToolbar > button:hover,
+.editorModeToggle button:hover {
+  background: #fff;
+  color: var(--ink);
+}
+
+.editorModeToggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(66px, 1fr));
+  gap: 3px;
+  margin-right: 6px;
+  padding: 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #ecefe9;
+}
+
+.editorModeToggle button {
+  width: 100%;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.editorModeToggle .editorModeActive {
+  background: var(--ink);
+  color: #fff;
+}
+
 .editor {
   flex: 1;
   min-height: 0;
@@ -1065,6 +1182,106 @@ small {
   color: #252b27;
   font-size: 17px;
   line-height: 1.74;
+}
+
+.markdownPreview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0 54px;
+  color: #252b27;
+  font-size: 17px;
+  line-height: 1.74;
+}
+
+.markdownPreview h2,
+.markdownPreview h3,
+.markdownPreview h4 {
+  margin: 1.1em 0 0.35em;
+  color: var(--ink);
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.markdownPreview h2:first-child,
+.markdownPreview h3:first-child,
+.markdownPreview h4:first-child {
+  margin-top: 0;
+}
+
+.markdownPreview h2 {
+  font-size: 30px;
+}
+
+.markdownPreview h3 {
+  font-size: 23px;
+}
+
+.markdownPreview h4 {
+  font-size: 19px;
+}
+
+.markdownPreview p {
+  margin: 0 0 0.9em;
+}
+
+.markdownPreview blockquote {
+  margin: 0 0 1em;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--brand);
+  color: var(--muted);
+}
+
+.markdownPreview pre {
+  overflow: auto;
+  margin: 0 0 1em;
+  padding: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #f2f4ef;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.previewCheck,
+.previewBullet {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.previewCheck span,
+.previewBullet::before {
+  flex: 0 0 auto;
+  margin-top: 0.46em;
+}
+
+.previewCheck span {
+  width: 15px;
+  height: 15px;
+  border: 1px solid #b9c2bb;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.previewCheck span.previewCheckDone {
+  border-color: var(--brand);
+  background:
+    linear-gradient(135deg, transparent 48%, #fff 48% 58%, transparent 58%) 3px 2px / 8px 9px no-repeat,
+    var(--brand);
+}
+
+.previewBullet::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
+.previewEmpty {
+  color: var(--muted);
 }
 
 .editorFooter {
@@ -1287,6 +1504,8 @@ small {
 
   .titleInput,
   .editor,
+  .editorToolbar,
+  .markdownPreview,
   .editorFooter {
     width: calc(100% - 32px);
   }
@@ -1297,6 +1516,20 @@ small {
   }
 
   .editor {
+    font-size: 16px;
+    line-height: 1.72;
+  }
+
+  .editorToolbar {
+    overflow-x: auto;
+    align-items: stretch;
+  }
+
+  .editorModeToggle {
+    flex: 0 0 146px;
+  }
+
+  .markdownPreview {
     font-size: 16px;
     line-height: 1.72;
   }

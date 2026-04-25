@@ -38,6 +38,8 @@ services:
       APP_ENV: ${APP_ENV:-production}
       APP_URL: ${APP_URL:-http://localhost}
       OBSCRIBE_EDITION: ${OBSCRIBE_EDITION:-selfhosted}
+      PASSWORD_RESET_URL: ${PASSWORD_RESET_URL:-}
+      PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-60}
       DB_HOST: db
       DB_PORT: 5432
       DB_DATABASE: ${DB_DATABASE:-obscribe}

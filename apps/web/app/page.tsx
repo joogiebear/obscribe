@@ -3,24 +3,36 @@
 import {
   ArrowLeft,
   BookOpen,
+  Bold,
   Check,
   CheckCircle2,
   Clock3,
+  Code2,
+  Download,
   Edit3,
   FileText,
+  Heading1,
+  Italic,
   KeyRound,
+  Link2,
+  List,
+  ListChecks,
   LogOut,
   Mail,
   Plus,
+  Quote,
+  RefreshCcw,
   Save,
   Search,
   Settings,
   ShieldCheck,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+type AuthMode = "login" | "register" | "forgot" | "reset";
 type User = { id: number; name: string; email: string };
 type Workspace = { id: number; name: string };
 type Notebook = { id: number; workspace_id: number; name: string };
@@ -33,6 +45,29 @@ type Note = {
 type MailStatus = { sent: boolean; driver: string; message?: string };
 type SearchNote = Note & { notebook_name: string };
 type SearchResults = { notebooks: Notebook[]; notes: SearchNote[] };
+type MarkdownFormat = "heading" | "bold" | "italic" | "link" | "check" | "bullet" | "quote" | "code";
+type AppStatus = {
+  status: string;
+  counts: { notebooks: number; notes: number };
+  mail: { driver: string; configured: boolean };
+};
+type WorkspaceExport = {
+  version: number;
+  exported_at: string;
+  user: Pick<User, "name" | "email">;
+  workspace: Pick<Workspace, "name">;
+  notebooks: Array<{
+    name: string;
+    notes: Array<{ content: string | null; created_at?: string; updated_at?: string }>;
+  }>;
+};
+type MarkdownBlock =
+  | { type: "heading"; text: string; level: 1 | 2 | 3 }
+  | { type: "check"; text: string; checked: boolean }
+  | { type: "bullet"; text: string }
+  | { type: "quote"; text: string }
+  | { type: "code"; text: string }
+  | { type: "paragraph"; text: string };
 
 const API =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -70,8 +105,67 @@ function compactDate(value?: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function markdownBlocks(value: string): MarkdownBlock[] {
+  const lines = value.split("\n");
+  const blocks: MarkdownBlock[] = [];
+  const codeLines: string[] = [];
+  let inCode = false;
+
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      if (inCode) {
+        blocks.push({ type: "code", text: codeLines.join("\n") || " " });
+        codeLines.length = 0;
+      }
+      inCode = !inCode;
+      continue;
+    }
+
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+    if (heading) {
+      blocks.push({
+        type: "heading",
+        level: heading[1].length as 1 | 2 | 3,
+        text: heading[2],
+      });
+      continue;
+    }
+
+    const check = /^-\s+\[( |x|X)\]\s+(.+)$/.exec(trimmed);
+    if (check) {
+      blocks.push({ type: "check", checked: check[1].toLowerCase() === "x", text: check[2] });
+      continue;
+    }
+
+    const bullet = /^-\s+(.+)$/.exec(trimmed);
+    if (bullet) {
+      blocks.push({ type: "bullet", text: bullet[1] });
+      continue;
+    }
+
+    const quote = /^>\s?(.+)$/.exec(trimmed);
+    if (quote) {
+      blocks.push({ type: "quote", text: quote[1] });
+      continue;
+    }
+
+    blocks.push({ type: "paragraph", text: line });
+  }
+
+  if (inCode) blocks.push({ type: "code", text: codeLines.join("\n") || " " });
+  return blocks;
+}
+
 export default function Home() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -103,9 +197,20 @@ export default function Home() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStatus, setPasswordStatus] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [resetStatus, setResetStatus] = useState("");
+  const [exportStatus, setExportStatus] = useState("");
+  const [importStatus, setImportStatus] = useState("");
+  const [editorMode, setEditorMode] = useState<"write" | "preview">("write");
+  const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
+  const [statusLoaded, setStatusLoaded] = useState(false);
   const globalSearchRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const targetNoteIdRef = useRef<number | null>(null);
 
   const headers = useMemo(
@@ -171,6 +276,7 @@ export default function Home() {
     setNotebooks(data.notebooks);
     setActiveNotebook((current) => current ?? data.notebooks[0] ?? null);
     setNotebooksLoaded(true);
+    return data.notebooks;
   }, [api]);
 
   const loadNotes = useCallback(
@@ -208,9 +314,28 @@ export default function Home() {
     [activeNote, api],
   );
 
+  const loadAppStatus = useCallback(async () => {
+    try {
+      const data = await api<AppStatus>("/status");
+      setAppStatus(data);
+      setStatusLoaded(true);
+    } catch (err) {
+      setStatusLoaded(true);
+      setError(err instanceof Error ? err.message : "Unable to load server status");
+    }
+  }, [api]);
+
   useEffect(() => {
     const saved = localStorage.getItem("obscribe_token");
     if (saved) setToken(saved);
+
+    const params = new URLSearchParams(window.location.search);
+    const urlResetToken = params.get("reset_token");
+    if (urlResetToken) {
+      setResetToken(urlResetToken);
+      setMode("reset");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
 
   useEffect(() => {
@@ -227,6 +352,12 @@ export default function Home() {
 
     loadSession();
   }, [loadMe, loadNotebooks, logout, token]);
+
+  useEffect(() => {
+    if (token && activeView === "settings") {
+      loadAppStatus();
+    }
+  }, [activeView, loadAppStatus, token]);
 
   useEffect(() => {
     if (!activeNotebook) {
@@ -291,6 +422,11 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeNote, activeNotebook, content, createNote, saveNote]);
 
+  function switchAuthMode(nextMode: AuthMode) {
+    setMode(nextMode);
+    setError("");
+  }
+
   async function auth(e: FormEvent) {
     e.preventDefault();
 
@@ -318,6 +454,53 @@ export default function Home() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
+    }
+  }
+
+  async function sendPasswordReset(emailValue: string) {
+    setResetStatus("");
+
+    try {
+      await api<{ sent: boolean }>("/password/forgot", {
+        method: "POST",
+        body: JSON.stringify({ email: emailValue }),
+      });
+      setResetStatus("If that account exists, a reset link has been sent.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to request password reset");
+    }
+  }
+
+  async function requestPasswordReset(e: FormEvent) {
+    e.preventDefault();
+    await sendPasswordReset(resetEmail || email);
+  }
+
+  async function resetAccountPassword(e: FormEvent) {
+    e.preventDefault();
+    setResetStatus("");
+
+    if (resetPassword !== resetConfirmPassword) {
+      setError("New password and confirmation do not match.");
+      return;
+    }
+
+    try {
+      await api<{ reset: boolean }>("/password/reset", {
+        method: "POST",
+        body: JSON.stringify({
+          token: resetToken,
+          new_password: resetPassword,
+        }),
+      });
+      setResetToken("");
+      setResetPassword("");
+      setResetConfirmPassword("");
+      setMode("login");
+      setError("");
+      setResetStatus("Password reset. You can sign in now.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to reset password");
     }
   }
 
@@ -462,6 +645,54 @@ export default function Home() {
     }
   }
 
+  async function exportWorkspace() {
+    try {
+      setExportStatus("Preparing export...");
+      const data = await api<WorkspaceExport>("/workspace/export");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `obscribe-export-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportStatus("Workspace export downloaded.");
+    } catch (err) {
+      setExportStatus("");
+      setError(err instanceof Error ? err.message : "Unable to export workspace");
+    }
+  }
+
+  async function importWorkspace(file: File | null) {
+    if (!file) return;
+
+    try {
+      setImportStatus("Importing workspace...");
+      const raw = await file.text();
+      const payload = JSON.parse(raw) as WorkspaceExport;
+      const data = await api<{ imported: { notebooks: number; notes: number } }>("/workspace/import", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const refreshedNotebooks = await loadNotebooks();
+      setActiveNotebook(refreshedNotebooks[0] ?? null);
+      setActiveNote(null);
+      setContent("");
+      await loadAppStatus();
+      setImportStatus(
+        `Imported ${data.imported.notebooks} ${data.imported.notebooks === 1 ? "notebook" : "notebooks"} and ${data.imported.notes} ${data.imported.notes === 1 ? "note" : "notes"}.`,
+      );
+    } catch (err) {
+      setImportStatus("");
+      setError(err instanceof Error ? err.message : "Unable to import workspace");
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
+
   async function openSearchNote(note: SearchNote) {
     try {
       const notebook =
@@ -534,6 +765,7 @@ export default function Home() {
     return `${noteTitle(note)} ${notePreview(note)}`.toLowerCase().includes(query);
   });
   const noteParts = splitNoteContent(content);
+  const previewBlocks = useMemo(() => markdownBlocks(noteParts.body), [noteParts.body]);
   const isDirty = activeNote ? (activeNote.content || "") !== content : false;
   const bodyWordCount = noteParts.body.trim() ? noteParts.body.trim().split(/\s+/).length : 0;
   const noteCountLabel = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
@@ -555,7 +787,84 @@ export default function Home() {
     setContent(noteParts.title ? `${noteParts.title}\n${value}` : `\n${value}`);
   }
 
+  function insertEditorText(replacement: string, selectionStart: number, selectionEnd = selectionStart) {
+    const textarea = editorRef.current;
+    const body = noteParts.body;
+    const start = textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? body.length;
+    const nextBody = `${body.slice(0, start)}${replacement}${body.slice(end)}`;
+
+    updateNoteBody(nextBody);
+    window.setTimeout(() => {
+      editorRef.current?.focus();
+      editorRef.current?.setSelectionRange(start + selectionStart, start + selectionEnd);
+    }, 0);
+  }
+
+  function insertMarkdown(format: MarkdownFormat) {
+    setEditorMode("write");
+    const textarea = editorRef.current;
+    const body = noteParts.body;
+    const start = textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? body.length;
+    const selected = body.slice(start, end);
+    const linePrefix = start > 0 && body[start - 1] !== "\n" ? "\n" : "";
+    const lineSuffix = end < body.length && body[end] !== "\n" ? "\n" : "";
+
+    if (format === "heading") {
+      const text = selected || "Heading";
+      insertEditorText(`${linePrefix}## ${text}${lineSuffix}`, linePrefix.length + 3, linePrefix.length + 3 + text.length);
+      return;
+    }
+
+    if (format === "bold") {
+      const text = selected || "bold text";
+      insertEditorText(`**${text}**`, 2, 2 + text.length);
+      return;
+    }
+
+    if (format === "italic") {
+      const text = selected || "italic text";
+      insertEditorText(`_${text}_`, 1, 1 + text.length);
+      return;
+    }
+
+    if (format === "link") {
+      const text = selected || "link text";
+      insertEditorText(`[${text}](https://)`, 1, 1 + text.length);
+      return;
+    }
+
+    if (format === "check") {
+      const text = selected || "Task";
+      insertEditorText(`${linePrefix}- [ ] ${text}${lineSuffix}`, linePrefix.length + 6, linePrefix.length + 6 + text.length);
+      return;
+    }
+
+    if (format === "bullet") {
+      const text = selected || "List item";
+      insertEditorText(`${linePrefix}- ${text}${lineSuffix}`, linePrefix.length + 2, linePrefix.length + 2 + text.length);
+      return;
+    }
+
+    if (format === "quote") {
+      const text = selected || "Quote";
+      insertEditorText(`${linePrefix}> ${text}${lineSuffix}`, linePrefix.length + 2, linePrefix.length + 2 + text.length);
+      return;
+    }
+
+    const text = selected || "code";
+    if (text.includes("\n")) {
+      insertEditorText(`\`\`\`\n${text}\n\`\`\``, 4, 4 + text.length);
+      return;
+    }
+
+    insertEditorText(`\`${text}\``, 1, 1 + text.length);
+  }
+
   if (!token) {
+    const showAuthTabs = mode === "login" || mode === "register";
+
     return (
       <main className="loginPage">
         <section className="loginStory" aria-label="Obscribe overview">
@@ -584,71 +893,150 @@ export default function Home() {
           <div className="mark">O</div>
           <p className="kicker">Private notebook workspace</p>
           <h2 id="auth-title" className="loginTitle">
-            {mode === "login" ? "Welcome back" : "Create your account"}
+            {mode === "login"
+              ? "Welcome back"
+              : mode === "register"
+                ? "Create your account"
+                : mode === "forgot"
+                  ? "Reset access"
+                  : "Set a new password"}
           </h2>
           <p className="muted">
-            Continue to your notes, notebooks, and self-hosted workspace checks.
+            {mode === "forgot" || mode === "reset"
+              ? "Recover access to your private workspace without contacting an operator."
+              : "Continue to your notes, notebooks, and self-hosted workspace checks."}
           </p>
 
-          <div className="tabs" role="tablist" aria-label="Authentication mode">
-            <button
-              className={mode === "login" ? "tabActive" : "tab"}
-              onClick={() => setMode("login")}
-              type="button"
-            >
-              Sign in
-            </button>
-            <button
-              className={mode === "register" ? "tabActive" : "tab"}
-              onClick={() => setMode("register")}
-              type="button"
-            >
-              Create account
-            </button>
-          </div>
+          {showAuthTabs && (
+            <div className="tabs" role="tablist" aria-label="Authentication mode">
+              <button
+                className={mode === "login" ? "tabActive" : "tab"}
+                onClick={() => switchAuthMode("login")}
+                type="button"
+              >
+                Sign in
+              </button>
+              <button
+                className={mode === "register" ? "tabActive" : "tab"}
+                onClick={() => switchAuthMode("register")}
+                type="button"
+              >
+                Create account
+              </button>
+            </div>
+          )}
 
           {error && <p className="error">{error}</p>}
+          {resetStatus && <p className="successText authStatus">{resetStatus}</p>}
 
-          <form onSubmit={auth} className="form">
-            {mode === "register" && (
+          {mode === "forgot" ? (
+            <form onSubmit={requestPasswordReset} className="form">
               <label className="fieldGroup">
-                <span className="fieldLabel">Name</span>
+                <span className="fieldLabel">Account email</span>
                 <input
                   className="input"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Jane Doe"
-                  autoComplete="name"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  type="email"
+                  autoComplete="email"
                   required
                 />
               </label>
-            )}
-            <label className="fieldGroup">
-              <span className="fieldLabel">Email</span>
-              <input
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                type="email"
-                autoComplete="email"
-                required
-              />
-            </label>
-            <label className="fieldGroup">
-              <span className="fieldLabel">Password</span>
-              <input
-                className="input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                required
-              />
-            </label>
-            <button className="primary">{mode === "login" ? "Sign in" : "Create account"}</button>
-          </form>
+              <button className="primary">Send reset link</button>
+              <button className="linkButton" onClick={() => switchAuthMode("login")} type="button">
+                Back to sign in
+              </button>
+            </form>
+          ) : mode === "reset" ? (
+            <form onSubmit={resetAccountPassword} className="form">
+              <label className="fieldGroup">
+                <span className="fieldLabel">Reset token</span>
+                <input
+                  className="input"
+                  value={resetToken}
+                  onChange={(e) => setResetToken(e.target.value)}
+                  placeholder="Paste reset token"
+                  autoComplete="one-time-code"
+                  required
+                />
+              </label>
+              <label className="fieldGroup">
+                <span className="fieldLabel">New password</span>
+                <input
+                  className="input"
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="New password"
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+              <label className="fieldGroup">
+                <span className="fieldLabel">Confirm new password</span>
+                <input
+                  className="input"
+                  type="password"
+                  value={resetConfirmPassword}
+                  onChange={(e) => setResetConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+              <button className="primary">Reset password</button>
+              <button className="linkButton" onClick={() => switchAuthMode("login")} type="button">
+                Back to sign in
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={auth} className="form">
+              {mode === "register" && (
+                <label className="fieldGroup">
+                  <span className="fieldLabel">Name</span>
+                  <input
+                    className="input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Jane Doe"
+                    autoComplete="name"
+                    required
+                  />
+                </label>
+              )}
+              <label className="fieldGroup">
+                <span className="fieldLabel">Email</span>
+                <input
+                  className="input"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  type="email"
+                  autoComplete="email"
+                  required
+                />
+              </label>
+              <label className="fieldGroup">
+                <span className="fieldLabel">Password</span>
+                <input
+                  className="input"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  required
+                />
+              </label>
+              <button className="primary">{mode === "login" ? "Sign in" : "Create account"}</button>
+              {mode === "login" && (
+                <button className="linkButton" onClick={() => switchAuthMode("forgot")} type="button">
+                  Forgot password?
+                </button>
+              )}
+            </form>
+          )}
         </section>
       </main>
     );
@@ -725,7 +1113,7 @@ export default function Home() {
             </button>
             <div>
               <p className="kicker">Settings</p>
-              <h2>Account and install settings</h2>
+              <h2>Workspace trust and account</h2>
               <p>{user?.email ?? "Loading account"}</p>
             </div>
           </div>
@@ -789,12 +1177,100 @@ export default function Home() {
                 </div>
               </div>
               <p className="settingsCopy">
-                Send a test email to confirm registration and notification mail is configured.
+                Send a test email to confirm registration, password recovery, and notification mail are configured.
               </p>
               <button onClick={sendTestEmail} className="secondary" type="button">
                 <Mail size={16} strokeWidth={2} />
                 Send test email
               </button>
+            </section>
+
+            <section className="settingsPanel" aria-labelledby="recovery-title">
+              <div className="settingsPanelHeader">
+                <KeyRound size={18} strokeWidth={2} />
+                <div>
+                  <p className="kicker">Recovery</p>
+                  <h3 id="recovery-title">Password recovery</h3>
+                </div>
+              </div>
+              <p className="settingsCopy">
+                Recovery depends on this server's SMTP setup. Send a reset link before you need it.
+              </p>
+              <button
+                onClick={() => sendPasswordReset(user?.email ?? "")}
+                className="secondary"
+                type="button"
+              >
+                <Mail size={16} strokeWidth={2} />
+                Send recovery email
+              </button>
+              {resetStatus && <p className="successText">{resetStatus}</p>}
+            </section>
+
+            <section className="settingsPanel" aria-labelledby="data-title">
+              <div className="settingsPanelHeader">
+                <Download size={18} strokeWidth={2} />
+                <div>
+                  <p className="kicker">Ownership</p>
+                  <h3 id="data-title">Workspace data</h3>
+                </div>
+              </div>
+              <p className="settingsCopy">
+                Export your notebooks as a portable JSON file or import an Obscribe export into this workspace.
+              </p>
+              <div className="settingsActions">
+                <button onClick={exportWorkspace} className="secondary" type="button">
+                  <Download size={16} strokeWidth={2} />
+                  Export JSON
+                </button>
+                <button onClick={() => importInputRef.current?.click()} className="secondary" type="button">
+                  <Upload size={16} strokeWidth={2} />
+                  Import JSON
+                </button>
+                <input
+                  ref={importInputRef}
+                  className="hiddenFile"
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(event) => importWorkspace(event.target.files?.[0] ?? null)}
+                />
+              </div>
+              {(exportStatus || importStatus) && (
+                <p className="successText">{importStatus || exportStatus}</p>
+              )}
+            </section>
+
+            <section className="settingsPanel" aria-labelledby="operator-title">
+              <div className="settingsPanelHeader">
+                <RefreshCcw size={18} strokeWidth={2} />
+                <div>
+                  <p className="kicker">Operations</p>
+                  <h3 id="operator-title">Self-host checks</h3>
+                </div>
+              </div>
+              <p className="settingsCopy">
+                These checks help confirm your self-hosted workspace is recoverable and portable.
+              </p>
+              <div className="opsList">
+                <span className={statusLoaded ? "opsReady" : "opsMuted"}>
+                  <CheckCircle2 size={15} strokeWidth={2.2} />
+                  {statusLoaded ? "API connected" : "Checking API"}
+                </span>
+                <span className={appStatus?.mail.configured ? "opsReady" : "opsMuted"}>
+                  <CheckCircle2 size={15} strokeWidth={2.2} />
+                  {appStatus?.mail.configured ? "SMTP configured" : "SMTP status pending"}
+                </span>
+                <span className="opsReady">
+                  <CheckCircle2 size={15} strokeWidth={2.2} />
+                  Export and import available
+                </span>
+                <span className="opsMuted">
+                  <FileText size={15} strokeWidth={2.2} />
+                  {appStatus
+                    ? `${appStatus.counts.notebooks} ${appStatus.counts.notebooks === 1 ? "notebook" : "notebooks"} / ${appStatus.counts.notes} ${appStatus.counts.notes === 1 ? "note" : "notes"}`
+                    : "Workspace counts loading"}
+                </span>
+              </div>
             </section>
           </div>
         </section>
@@ -1056,13 +1532,84 @@ export default function Home() {
                     }}
                     placeholder="Untitled"
                   />
-                  <textarea
-                    ref={editorRef}
-                    className="editor"
-                    value={noteParts.body}
-                    onChange={(e) => updateNoteBody(e.target.value)}
-                    placeholder="Start writing..."
-                  />
+                  <div className="editorToolbar" aria-label="Formatting toolbar">
+                    <div className="editorModeToggle" role="tablist" aria-label="Editor mode">
+                      <button
+                        className={editorMode === "write" ? "editorModeActive" : ""}
+                        onClick={() => setEditorMode("write")}
+                        type="button"
+                      >
+                        Write
+                      </button>
+                      <button
+                        className={editorMode === "preview" ? "editorModeActive" : ""}
+                        onClick={() => setEditorMode("preview")}
+                        type="button"
+                      >
+                        Preview
+                      </button>
+                    </div>
+                    <button onClick={() => insertMarkdown("heading")} type="button" aria-label="Heading" title="Heading">
+                      <Heading1 size={16} strokeWidth={2.3} />
+                    </button>
+                    <button onClick={() => insertMarkdown("bold")} type="button" aria-label="Bold" title="Bold">
+                      <Bold size={16} strokeWidth={2.3} />
+                    </button>
+                    <button onClick={() => insertMarkdown("italic")} type="button" aria-label="Italic" title="Italic">
+                      <Italic size={16} strokeWidth={2.3} />
+                    </button>
+                    <button onClick={() => insertMarkdown("link")} type="button" aria-label="Link" title="Link">
+                      <Link2 size={16} strokeWidth={2.3} />
+                    </button>
+                    <button onClick={() => insertMarkdown("check")} type="button" aria-label="Checklist" title="Checklist">
+                      <ListChecks size={16} strokeWidth={2.3} />
+                    </button>
+                    <button onClick={() => insertMarkdown("bullet")} type="button" aria-label="Bulleted list" title="Bulleted list">
+                      <List size={16} strokeWidth={2.3} />
+                    </button>
+                    <button onClick={() => insertMarkdown("quote")} type="button" aria-label="Quote" title="Quote">
+                      <Quote size={16} strokeWidth={2.3} />
+                    </button>
+                    <button onClick={() => insertMarkdown("code")} type="button" aria-label="Code" title="Code">
+                      <Code2 size={16} strokeWidth={2.3} />
+                    </button>
+                  </div>
+                  {editorMode === "write" ? (
+                    <textarea
+                      ref={editorRef}
+                      className="editor"
+                      value={noteParts.body}
+                      onChange={(e) => updateNoteBody(e.target.value)}
+                      placeholder="Start writing in Markdown..."
+                    />
+                  ) : (
+                    <div className="markdownPreview" aria-label="Markdown preview">
+                      {previewBlocks.length ? (
+                        previewBlocks.map((block, index) => {
+                          if (block.type === "heading") {
+                            const HeadingTag = `h${Math.min(block.level + 1, 4)}` as "h2" | "h3" | "h4";
+                            return <HeadingTag key={index}>{block.text}</HeadingTag>;
+                          }
+
+                          if (block.type === "check") {
+                            return (
+                              <p key={index} className="previewCheck">
+                                <span className={block.checked ? "previewCheckDone" : ""} aria-hidden="true" />
+                                {block.text}
+                              </p>
+                            );
+                          }
+
+                          if (block.type === "bullet") return <p key={index} className="previewBullet">{block.text}</p>;
+                          if (block.type === "quote") return <blockquote key={index}>{block.text}</blockquote>;
+                          if (block.type === "code") return <pre key={index}>{block.text}</pre>;
+                          return <p key={index}>{block.text}</p>;
+                        })
+                      ) : (
+                        <p className="previewEmpty">Nothing to preview yet.</p>
+                      )}
+                    </div>
+                  )}
                   <footer className="editorFooter" aria-label="Note details">
                     <span>{bodyWordCount} {bodyWordCount === 1 ? "word" : "words"}</span>
                     <span>{noteParts.body.length} characters</span>

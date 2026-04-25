@@ -11,8 +11,18 @@ PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "${ROOT_DIR}" | tr '[:upper:]' 
 
 cd "${ROOT_DIR}"
 
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Docker is not installed or is not on PATH."
+  exit 1
+fi
+
 if [ ! -f "${ENV_FILE}" ]; then
   echo "Missing .env. Run scripts/deploy.sh first."
+  exit 1
+fi
+
+if ! docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config --quiet; then
+  echo "Docker Compose configuration is invalid. Fix it before taking a backup."
   exit 1
 fi
 
@@ -21,6 +31,8 @@ chmod 700 "${BACKUP_ROOT}" "${BACKUP_DIR}"
 
 DB_USER="$(grep '^DB_USERNAME=' "${ENV_FILE}" | tail -n 1 | cut -d= -f2-)"
 DB_NAME="$(grep '^DB_DATABASE=' "${ENV_FILE}" | tail -n 1 | cut -d= -f2-)"
+DB_USER="${DB_USER:-obscribe}"
+DB_NAME="${DB_NAME:-obscribe}"
 
 echo "Creating database backup..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T db pg_dump -U "${DB_USER}" -d "${DB_NAME}" --clean --if-exists > "${BACKUP_DIR}/postgres.sql"
@@ -39,6 +51,7 @@ backup_volume() {
 }
 
 backup_volume "${PROJECT_NAME}_obscribe_minio" "minio.tar"
+backup_volume "${PROJECT_NAME}_obscribe_redis" "redis.tar"
 backup_volume "${PROJECT_NAME}_caddy_data" "caddy-data.tar"
 backup_volume "${PROJECT_NAME}_caddy_config" "caddy-config.tar"
 
@@ -60,6 +73,10 @@ cat > "${BACKUP_DIR}/manifest.json" <<JSON
   "app_url": "$(grep '^APP_URL=' "${ENV_FILE}" | tail -n 1 | cut -d= -f2-)",
   "artifacts": [
     "postgres.sql",
+    "minio.tar",
+    "redis.tar",
+    "caddy-data.tar",
+    "caddy-config.tar",
     "env.backup",
     "containers.txt",
     "volumes.txt",

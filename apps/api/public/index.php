@@ -220,6 +220,40 @@ function send_test_email(array $user): array
     }
 }
 
+function password_reset_ttl_minutes(): int
+{
+    $ttl = (int) env_value('PASSWORD_RESET_TTL_MINUTES', '60');
+    return max(10, min(1440, $ttl));
+}
+
+function password_reset_link(string $token): string
+{
+    $base = trim((string) env_value('PASSWORD_RESET_URL', ''));
+    if ($base === '') {
+        $base = rtrim((string) env_value('APP_URL', 'http://localhost'), '/') . '/';
+    }
+
+    $separator = str_contains($base, '?') ? '&' : '?';
+    return $base . $separator . 'reset_token=' . rawurlencode($token);
+}
+
+function send_password_reset_email(array $user, string $token): void
+{
+    $mailer = strtolower((string) env_value('MAIL_MAILER', 'log'));
+    $subject = 'Reset your Obscribe password';
+    $ttl = password_reset_ttl_minutes();
+    $link = password_reset_link($token);
+    $body = "Hi {$user['name']},\n\nUse this link to reset your Obscribe password:\n{$link}\n\n" .
+        "This link expires in {$ttl} minutes. If you did not request it, you can ignore this email.\n";
+
+    if ($mailer !== 'smtp') {
+        error_log("Mail log: {$subject} -> {$user['email']} ({$link})");
+        return;
+    }
+
+    smtp_send_message($user['email'], $subject, $body);
+}
+
 function db(): PDO
 {
     static $pdo = null;
@@ -307,6 +341,18 @@ CREATE TABLE IF NOT EXISTS api_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_used_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS password_reset_tokens_user_created_idx ON password_reset_tokens (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS password_reset_tokens_expires_idx ON password_reset_tokens (expires_at);
 SQL;
 
     db()->exec($schema);
@@ -440,6 +486,168 @@ function note_for_workspace(int $id, int $workspaceId): array
     return $note;
 }
 
+function import_timestamp(mixed $value): ?string
+{
+    if (!is_string($value) || trim($value) === '') {
+        return null;
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return null;
+    }
+
+    return gmdate(DATE_ATOM, $timestamp);
+}
+
+function workspace_export_payload(array $user, array $workspace): array
+{
+    $workspaceId = (int) $workspace['id'];
+    $stmt = db()->prepare(
+        'SELECT id, name
+         FROM notebooks
+         WHERE workspace_id = :workspace_id
+         ORDER BY updated_at DESC, id DESC',
+    );
+    $stmt->execute(['workspace_id' => $workspaceId]);
+    $notebooks = [];
+
+    foreach ($stmt->fetchAll() as $notebook) {
+        $notesStmt = db()->prepare(
+            'SELECT content, created_at, updated_at
+             FROM notes
+             WHERE notebook_id = :notebook_id
+             ORDER BY updated_at DESC, id DESC',
+        );
+        $notesStmt->execute(['notebook_id' => $notebook['id']]);
+
+        $notebooks[] = [
+            'name' => $notebook['name'],
+            'notes' => array_map(
+                static fn (array $note): array => [
+                    'content' => $note['content'],
+                    'created_at' => $note['created_at'],
+                    'updated_at' => $note['updated_at'],
+                ],
+                $notesStmt->fetchAll(),
+            ),
+        ];
+    }
+
+    return [
+        'version' => 1,
+        'exported_at' => gmdate(DATE_ATOM),
+        'user' => public_user($user),
+        'workspace' => ['id' => $workspaceId, 'name' => $workspace['name']],
+        'notebooks' => $notebooks,
+    ];
+}
+
+function import_workspace_payload(array $data, int $workspaceId): array
+{
+    if (!isset($data['notebooks']) || !is_array($data['notebooks'])) {
+        json_response(['message' => 'notebooks must be an array.'], 422);
+    }
+
+    if (count($data['notebooks']) > 200) {
+        json_response(['message' => 'Import is limited to 200 notebooks.'], 422);
+    }
+
+    $notebooksToImport = [];
+    $totalNotes = 0;
+    foreach ($data['notebooks'] as $notebook) {
+        if (!is_array($notebook)) {
+            json_response(['message' => 'Each notebook must be an object.'], 422);
+        }
+
+        $name = trim((string) ($notebook['name'] ?? ''));
+        if ($name === '') {
+            json_response(['message' => 'Notebook name is required.'], 422);
+        }
+
+        $notes = $notebook['notes'] ?? [];
+        if (!is_array($notes)) {
+            json_response(['message' => 'Notebook notes must be an array.'], 422);
+        }
+
+        $totalNotes += count($notes);
+        if ($totalNotes > 10000) {
+            json_response(['message' => 'Import is limited to 10000 notes.'], 422);
+        }
+
+        $notesToImport = [];
+        foreach ($notes as $note) {
+            if (!is_array($note)) {
+                json_response(['message' => 'Each note must be an object.'], 422);
+            }
+
+            $content = array_key_exists('content', $note) ? (string) $note['content'] : '';
+            if (strlen($content) > 1048576) {
+                json_response(['message' => 'Each note is limited to 1MB.'], 422);
+            }
+
+            $createdAt = import_timestamp($note['created_at'] ?? null);
+            $updatedAt = import_timestamp($note['updated_at'] ?? null) ?? $createdAt;
+            $notesToImport[] = [
+                'content' => $content,
+                'created_at' => $createdAt,
+                'updated_at' => $updatedAt,
+            ];
+        }
+
+        $notebooksToImport[] = ['name' => $name, 'notes' => $notesToImport];
+    }
+
+    $pdo = db();
+    $importedNotebooks = 0;
+    $importedNotes = 0;
+    $pdo->beginTransaction();
+
+    try {
+        foreach ($notebooksToImport as $notebook) {
+            $stmt = $pdo->prepare(
+                'INSERT INTO notebooks (workspace_id, name)
+                 VALUES (:workspace_id, :name)
+                 RETURNING id',
+            );
+            $stmt->execute([
+                'workspace_id' => $workspaceId,
+                'name' => $notebook['name'],
+            ]);
+            $createdNotebook = $stmt->fetch();
+            $importedNotebooks++;
+
+            foreach ($notebook['notes'] as $note) {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO notes (notebook_id, content, created_at, updated_at)
+                     VALUES (
+                         :notebook_id,
+                         :content,
+                         COALESCE(CAST(:created_at AS timestamptz), now()),
+                         COALESCE(CAST(:updated_at AS timestamptz), now())
+                     )',
+                );
+                $stmt->execute([
+                    'notebook_id' => $createdNotebook['id'],
+                    'content' => $note['content'],
+                    'created_at' => $note['created_at'],
+                    'updated_at' => $note['updated_at'],
+                ]);
+                $importedNotes++;
+            }
+        }
+
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+
+    return ['notebooks' => $importedNotebooks, 'notes' => $importedNotes];
+}
+
 try {
     migrate();
 
@@ -525,12 +733,147 @@ try {
         ]);
     }
 
+    if ($method === 'POST' && $path === '/password/forgot') {
+        $data = input();
+        require_fields($data, ['email']);
+
+        $email = trim((string) $data['email']);
+        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $stmt = db()->prepare('SELECT * FROM users WHERE email = lower(:email) LIMIT 1');
+            $stmt->execute(['email' => $email]);
+            $resetUser = $stmt->fetch();
+
+            if ($resetUser) {
+                $token = bin2hex(random_bytes(32));
+                $expiresAt = gmdate(DATE_ATOM, time() + (password_reset_ttl_minutes() * 60));
+                $pdo = db();
+                $pdo->beginTransaction();
+
+                try {
+                    $pdo->prepare(
+                        'UPDATE password_reset_tokens
+                         SET used_at = now()
+                         WHERE user_id = :user_id AND used_at IS NULL',
+                    )->execute(['user_id' => $resetUser['id']]);
+
+                    $stmt = $pdo->prepare(
+                        'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+                         VALUES (:user_id, :token_hash, :expires_at)',
+                    );
+                    $stmt->execute([
+                        'user_id' => $resetUser['id'],
+                        'token_hash' => hash('sha256', $token),
+                        'expires_at' => $expiresAt,
+                    ]);
+
+                    $pdo->commit();
+                } catch (Throwable $exception) {
+                    if ($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+                    throw $exception;
+                }
+
+                try {
+                    send_password_reset_email($resetUser, $token);
+                } catch (Throwable $exception) {
+                    error_log('Password reset email failed: ' . $exception->getMessage());
+                }
+            }
+        }
+
+        json_response(['sent' => true]);
+    }
+
+    if ($method === 'POST' && $path === '/password/reset') {
+        $data = input();
+        require_fields($data, ['token', 'new_password']);
+
+        if (strlen((string) $data['new_password']) < 8) {
+            json_response(['message' => 'New password must be at least 8 characters.'], 422);
+        }
+
+        $pdo = db();
+        $pdo->beginTransaction();
+
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT id, user_id
+                 FROM password_reset_tokens
+                 WHERE token_hash = :token_hash
+                   AND used_at IS NULL
+                   AND expires_at > now()
+                 LIMIT 1
+                 FOR UPDATE',
+            );
+            $stmt->execute(['token_hash' => hash('sha256', trim((string) $data['token']))]);
+            $reset = $stmt->fetch();
+
+            if (!$reset) {
+                $pdo->rollBack();
+                json_response(['message' => 'Invalid or expired reset token.'], 422);
+            }
+
+            $stmt = $pdo->prepare(
+                'UPDATE users
+                 SET password_hash = :password_hash, updated_at = now()
+                 WHERE id = :id',
+            );
+            $stmt->execute([
+                'id' => $reset['user_id'],
+                'password_hash' => password_hash((string) $data['new_password'], PASSWORD_DEFAULT),
+            ]);
+
+            $pdo->prepare('UPDATE password_reset_tokens SET used_at = now() WHERE id = :id')
+                ->execute(['id' => $reset['id']]);
+            $pdo->prepare('DELETE FROM api_tokens WHERE user_id = :user_id')
+                ->execute(['user_id' => $reset['user_id']]);
+
+            $pdo->commit();
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $exception;
+        }
+
+        json_response(['reset' => true]);
+    }
+
     $user = authenticated_user();
     $workspace = current_workspace((int) $user['id']);
     if (!$workspace) {
         json_response(['message' => 'Workspace not found.'], 404);
     }
     $workspaceId = (int) $workspace['id'];
+
+    if ($method === 'GET' && $path === '/status') {
+        $stmt = db()->prepare('SELECT count(*) AS total FROM notebooks WHERE workspace_id = :workspace_id');
+        $stmt->execute(['workspace_id' => $workspaceId]);
+        $notebookCount = (int) $stmt->fetch()['total'];
+
+        $stmt = db()->prepare(
+            'SELECT count(*) AS total
+             FROM notes
+             INNER JOIN notebooks ON notebooks.id = notes.notebook_id
+             WHERE notebooks.workspace_id = :workspace_id',
+        );
+        $stmt->execute(['workspace_id' => $workspaceId]);
+        $noteCount = (int) $stmt->fetch()['total'];
+
+        json_response([
+            'status' => 'ok',
+            'user' => public_user($user),
+            'workspace' => ['id' => $workspaceId, 'name' => $workspace['name']],
+            'counts' => ['notebooks' => $notebookCount, 'notes' => $noteCount],
+            'mail' => [
+                'driver' => strtolower((string) env_value('MAIL_MAILER', 'log')),
+                'configured' => strtolower((string) env_value('MAIL_MAILER', 'log')) === 'smtp'
+                    && trim((string) env_value('MAIL_HOST', '')) !== ''
+                    && trim((string) env_value('MAIL_FROM_ADDRESS', '')) !== '',
+            ],
+        ]);
+    }
 
     if ($method === 'GET' && $path === '/me') {
         json_response([
@@ -570,6 +913,14 @@ try {
             'mail' => $mail,
             'message' => $mail['message'] ?? 'SMTP test failed.',
         ], $mail['sent'] ? 200 : 422);
+    }
+
+    if ($method === 'GET' && $path === '/workspace/export') {
+        json_response(workspace_export_payload($user, $workspace));
+    }
+
+    if ($method === 'POST' && $path === '/workspace/import') {
+        json_response(['imported' => import_workspace_payload(input(), $workspaceId)]);
     }
 
     if ($method === 'GET' && $path === '/search') {

@@ -9,6 +9,7 @@ Self-hostable notebook workspace with a hosted SaaS path.
 - `docker-compose.yml`: local development
 - `docker-compose.prod.yml`: single-server self-host install
 - `scripts/deploy.sh`: repeatable Bash deploy for one server
+- `docs/self-host-operations.md`: backup, restore, release, and rollback runbook
 
 The API intentionally matches the current product contract while the larger Laravel backend is still being built out.
 
@@ -132,11 +133,17 @@ From `/opt/obscribe` on the server:
 ```bash
 bash scripts/status.sh
 bash scripts/backup.sh
+bash scripts/release.sh
+bash scripts/rollback.sh
 bash scripts/restore.sh /opt/obscribe/backups/obscribe-backup-YYYYmmddHHMMSS.tar.gz
 bash scripts/logs.sh
 ```
 
-Backups include a PostgreSQL dump, object-storage volume data when present, Caddy certificate/config volumes, a copy of `.env`, and a small service inventory. The restore command asks for explicit confirmation before replacing the database. Support bundles redact secrets before saving environment details.
+Use `scripts/release.sh` for normal updates because it creates a pre-release backup, records the previous commit, rebuilds the stack, and checks API health. Use `scripts/rollback.sh` when a release is bad but the data is still good. Use `scripts/restore.sh` when the database or stored files need to return to an earlier backup.
+
+Backups include a PostgreSQL dump, object-storage volume data when present, Redis persistence when present, Caddy certificate/config volumes, a copy of `.env`, and a small service inventory. The restore command asks for explicit confirmation before replacing the database. Support bundles redact secrets before saving environment details.
+
+See the full self-host runbook in [docs/self-host-operations.md](docs/self-host-operations.md).
 
 ## SaaS Direction
 

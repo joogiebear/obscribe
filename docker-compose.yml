@@ -20,11 +20,15 @@ services:
     ports:
       - "8000:8000"
     environment:
+      APP_URL: http://localhost:3000
+      PASSWORD_RESET_URL: http://localhost:3000
+      PASSWORD_RESET_TTL_MINUTES: 60
       DB_HOST: db
       DB_PORT: 5432
       DB_DATABASE: obscribe
       DB_USERNAME: obscribe
       DB_PASSWORD: secret
+      MAIL_MAILER: log
     depends_on:
       db:
         condition: service_healthy
