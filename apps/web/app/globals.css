@@ -608,12 +608,31 @@ textarea:focus-visible {
 
 .countPill {
   flex: 0 0 auto;
+  min-width: 72px;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 5px 8px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
+  text-align: center;
+}
+
+.countPill[aria-busy="true"] {
+  color: transparent;
+  position: relative;
+}
+
+.countPill[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 50%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e2e6df, #f3f4ef, #e2e6df);
+  transform: translateY(-50%);
 }
 
 .createRow {
@@ -724,17 +743,44 @@ textarea:focus-visible {
 .inlineConfirm {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
   gap: 8px;
-  margin: 0 8px 8px;
-  padding: 10px;
+  margin: 1px 8px 9px;
+  padding: 11px;
   border: 1px solid #f1bec8;
   border-radius: 8px;
   background: var(--danger-wash);
   color: var(--danger);
-  font-size: 12px;
+  box-shadow: 0 10px 22px rgba(159, 18, 57, 0.08);
+}
+
+.inlineConfirm p {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
   font-weight: 750;
+  line-height: 1.25;
+}
+
+.inlineConfirm p span {
+  color: #68132a;
+}
+
+.inlineConfirm small {
+  color: #9f5164;
+  font-size: 12px;
+}
+
+.inlineConfirmActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.inlineConfirmActions .secondary,
+.inlineConfirmActions .dangerButton {
+  min-height: 34px;
+  padding: 7px 9px;
 }
 
 .noteItem,

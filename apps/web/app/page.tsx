@@ -74,6 +74,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
+  const [notebooksLoaded, setNotebooksLoaded] = useState(false);
   const [notebookName, setNotebookName] = useState("");
   const [activeNotebook, setActiveNotebook] = useState<Notebook | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -137,6 +138,7 @@ export default function Home() {
     setUser(null);
     setWorkspace(null);
     setNotebooks([]);
+    setNotebooksLoaded(false);
     setActiveNotebook(null);
     setNotes([]);
     setActiveNote(null);
@@ -150,9 +152,11 @@ export default function Home() {
   }, [api]);
 
   const loadNotebooks = useCallback(async () => {
+    setNotebooksLoaded(false);
     const data = await api<{ notebooks: Notebook[] }>("/notebooks");
     setNotebooks(data.notebooks);
     setActiveNotebook((current) => current ?? data.notebooks[0] ?? null);
+    setNotebooksLoaded(true);
   }, [api]);
 
   const loadNotes = useCallback(
@@ -305,6 +309,7 @@ export default function Home() {
       await loadNotebooks();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create notebook");
+      setNotebooksLoaded(true);
     }
   }
 
@@ -414,7 +419,9 @@ export default function Home() {
   const isDirty = activeNote ? (activeNote.content || "") !== content : false;
   const bodyWordCount = noteParts.body.trim() ? noteParts.body.trim().split(/\s+/).length : 0;
   const noteCountLabel = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
-  const notebookCountLabel = `${notebooks.length} ${notebooks.length === 1 ? "notebook" : "notebooks"}`;
+  const notebookCountLabel = notebooksLoaded
+    ? `${notebooks.length} ${notebooks.length === 1 ? "notebook" : "notebooks"}`
+    : "Loading";
   const displayStatus =
     status === "Saved" && lastSavedAt
       ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
@@ -673,7 +680,7 @@ export default function Home() {
                   <p className="kicker">Workspace</p>
                   <h2 className="panelTitle">Notebooks</h2>
                 </div>
-                <span className="countPill">{notebookCountLabel}</span>
+                <span className="countPill" aria-busy={!notebooksLoaded}>{notebookCountLabel}</span>
               </div>
 
               <form onSubmit={createNotebook} className="createRow">
@@ -723,14 +730,19 @@ export default function Home() {
                       <Trash2 size={14} strokeWidth={2} />
                     </button>
                     {pendingNotebookDelete === notebook.id && (
-                      <div className="inlineConfirm">
-                        <span>Delete notebook and its notes?</span>
-                        <button className="secondary" onClick={() => setPendingNotebookDelete(null)} type="button">
-                          Cancel
-                        </button>
-                        <button className="dangerButton" onClick={() => deleteNotebook(notebook.id)} type="button">
-                          Delete
-                        </button>
+                      <div className="inlineConfirm" role="alert">
+                        <p>
+                          Delete <span>{notebook.name}</span>?
+                        </p>
+                        <small>This also removes its notes.</small>
+                        <div className="inlineConfirmActions">
+                          <button className="secondary" onClick={() => setPendingNotebookDelete(null)} type="button">
+                            Cancel
+                          </button>
+                          <button className="dangerButton" onClick={() => deleteNotebook(notebook.id)} type="button">
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
