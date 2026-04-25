@@ -297,10 +297,10 @@ textarea:focus-visible {
   min-width: 0;
   margin-bottom: 12px;
   padding-left: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  color: rgba(234, 240, 236, 0.58);
-  background: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .lightSearch {
@@ -428,6 +428,87 @@ textarea:focus-visible {
   padding: 14px 22px;
 }
 
+.settingsPage {
+  height: calc(100svh - 58px);
+  overflow: auto;
+  padding: 44px clamp(22px, 5vw, 72px);
+  background:
+    linear-gradient(90deg, rgba(18, 43, 39, 0.03), transparent 24%),
+    var(--paper-strong);
+}
+
+.settingsHero,
+.settingsGrid {
+  max-width: 1040px;
+  margin-inline: auto;
+}
+
+.settingsHero {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: start;
+  gap: 32px;
+  margin-bottom: 36px;
+}
+
+.settingsHero h2 {
+  margin: 8px 0 8px;
+  color: var(--ink);
+  font-size: 42px;
+  line-height: 1.06;
+  letter-spacing: 0;
+}
+
+.settingsHero p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.1fr) minmax(280px, 0.9fr);
+  gap: 18px;
+}
+
+.settingsPanel {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fbfaf6;
+  padding: 24px;
+}
+
+.settingsPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 22px;
+  color: var(--brand);
+}
+
+.settingsPanelHeader h3 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.settingsForm {
+  display: grid;
+  gap: 14px;
+}
+
+.settingsCopy {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.successText {
+  margin: 0;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 750;
+}
+
 .settingsTitle {
   margin: 3px 0 0;
   font-size: 17px;
@@ -465,35 +546,33 @@ textarea:focus-visible {
 
 .rail {
   padding: 18px 16px;
-  color: #eaf0ec;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 24%),
-    var(--brand-rail);
+  border-right: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+  background: #f7f7f2;
 }
 
 .rail .kicker,
 .rail .emptySmall {
-  color: rgba(234, 240, 236, 0.62);
+  color: var(--muted);
 }
 
 .rail .panelTitle {
-  color: #fff;
+  color: var(--ink);
 }
 
 .rail .input,
 .rail .searchInput {
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  border-color: var(--line);
+  color: var(--ink);
 }
 
 .rail .input::placeholder,
 .rail .searchInput::placeholder {
-  color: rgba(234, 240, 236, 0.52);
+  color: var(--faint);
 }
 
 .notesRail {
   padding: 18px 16px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
   border-right: 1px solid var(--line-soft);
   background: #f7f7f2;
 }
@@ -529,10 +608,10 @@ textarea:focus-visible {
 
 .countPill {
   flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 5px 8px;
-  color: rgba(234, 240, 236, 0.7);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
 }
@@ -549,11 +628,11 @@ textarea:focus-visible {
   min-height: 38px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--brand-strong);
 }
 
 .addButton:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #0b1e1a;
 }
 
 .newNote {
@@ -573,8 +652,8 @@ textarea:focus-visible {
   gap: 4px;
 }
 
-.item,
-.activeItem,
+.notebookRow,
+.notebookRowActive,
 .noteItem,
 .noteActive {
   width: 100%;
@@ -585,24 +664,77 @@ textarea:focus-visible {
   background: transparent;
 }
 
-.item,
-.activeItem {
-  display: flex;
-  justify-content: space-between;
+.notebookRow,
+.notebookRowActive {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-soft);
+}
+
+.notebookRow:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.notebookRowActive {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.notebookRowActive::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
+.notebookSelect {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 10px 6px 10px 14px;
+  font-weight: 750;
+}
+
+.rowIconButton {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.rowIconButton:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.inlineConfirm {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 8px;
-  padding: 10px 10px;
-  color: rgba(234, 240, 236, 0.82);
-  font-weight: 700;
-}
-
-.item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.activeItem {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.11);
-  color: #fff;
+  margin: 0 8px 8px;
+  padding: 10px;
+  border: 1px solid #f1bec8;
+  border-radius: 8px;
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .noteItem,
@@ -860,7 +992,7 @@ small {
   }
 
   .page {
-    padding: 10px;
+    padding: 0;
   }
 
   .topbar {
@@ -918,6 +1050,29 @@ small {
 
   .notesRail {
     border-right: 0;
+  }
+
+  .settingsPage {
+    height: calc(100svh - 50px);
+    padding: 28px 18px;
+  }
+
+  .settingsHero {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+
+  .settingsHero h2 {
+    font-size: 34px;
+  }
+
+  .settingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineConfirm {
+    grid-template-columns: 1fr;
   }
 
   .editorTop {

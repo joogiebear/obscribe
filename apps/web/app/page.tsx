@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  ArrowLeft,
   BookOpen,
   CheckCircle2,
   Clock3,
   FileText,
+  KeyRound,
   LogOut,
   Mail,
   Plus,
@@ -81,10 +83,15 @@ export default function Home() {
   const [error, setError] = useState("");
   const [notebookQuery, setNotebookQuery] = useState("");
   const [noteQuery, setNoteQuery] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
+  const [activeView, setActiveView] = useState<"workspace" | "settings">("workspace");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [mobilePane, setMobilePane] = useState<"notebooks" | "notes" | "editor">("editor");
   const [pendingDelete, setPendingDelete] = useState(false);
+  const [pendingNotebookDelete, setPendingNotebookDelete] = useState<number | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState("");
 
   const headers = useMemo(
     () => ({
@@ -243,8 +250,9 @@ export default function Home() {
       }
 
       if (event.key === "Escape") {
-        setShowSettings(false);
+        setActiveView("workspace");
         setPendingDelete(false);
+        setPendingNotebookDelete(null);
       }
     }
 
@@ -336,6 +344,26 @@ export default function Home() {
     }
   }
 
+  async function deleteNotebook(id: number) {
+    try {
+      await api<{ deleted: boolean }>(`/notebooks/${id}`, { method: "DELETE" });
+      const remaining = notebooks.filter((notebook) => notebook.id !== id);
+      setNotebooks(remaining);
+      setPendingNotebookDelete(null);
+
+      if (activeNotebook?.id === id) {
+        setActiveNotebook(remaining[0] ?? null);
+        setNotes([]);
+        setActiveNote(null);
+        setMobilePane(remaining.length ? "notes" : "notebooks");
+      }
+
+      setStatus("Notebook deleted");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete notebook");
+    }
+  }
+
   async function sendTestEmail() {
     try {
       setStatus("Sending test email...");
@@ -345,6 +373,32 @@ export default function Home() {
     } catch (err) {
       setStatus("Test email failed");
       setError(err instanceof Error ? err.message : "Unable to send test email");
+    }
+  }
+
+  async function changePassword(e: FormEvent) {
+    e.preventDefault();
+    setPasswordStatus("");
+
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation do not match.");
+      return;
+    }
+
+    try {
+      await api<{ updated: boolean }>("/me/password", {
+        method: "POST",
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordStatus("Password updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update password");
     }
   }
 
@@ -486,7 +540,7 @@ export default function Home() {
           </div>
         </div>
         <button
-          onClick={() => setShowSettings((value) => !value)}
+          onClick={() => setActiveView("settings")}
           className="iconButton"
           type="button"
           aria-label="Settings"
@@ -500,233 +554,330 @@ export default function Home() {
       </header>
 
       {error && <p className="error errorWide">{error}</p>}
-      {showSettings && (
-        <section className="settingsBar" aria-label="Workspace settings">
-          <div>
-            <p className="kicker">Admin</p>
-            <h2 className="settingsTitle">Self-host checks</h2>
-            <p className="settingsMeta">{user?.email ?? "Loading account"}</p>
-          </div>
-          <button onClick={sendTestEmail} className="secondary" type="button">
-            <Mail size={16} strokeWidth={2} />
-            Send test email
-          </button>
-        </section>
-      )}
 
-      <nav className="mobileSwitcher" aria-label="Workspace panels">
-        <button
-          className={mobilePane === "notebooks" ? "mobilePaneActive" : "mobilePaneButton"}
-          onClick={() => setMobilePane("notebooks")}
-          type="button"
-        >
-          <BookOpen size={15} strokeWidth={2.2} />
-          Notebooks
-        </button>
-        <button
-          className={mobilePane === "notes" ? "mobilePaneActive" : "mobilePaneButton"}
-          onClick={() => setMobilePane("notes")}
-          type="button"
-        >
-          <FileText size={15} strokeWidth={2.2} />
-          Notes
-        </button>
-        <button
-          className={mobilePane === "editor" ? "mobilePaneActive" : "mobilePaneButton"}
-          onClick={() => setMobilePane("editor")}
-          type="button"
-        >
-          <Save size={15} strokeWidth={2.2} />
-          Editor
-        </button>
-      </nav>
-
-      <section className={`shell pane-${mobilePane}`}>
-        <aside className="rail" aria-label="Notebooks">
-          <div className="panelHeader">
-            <div>
-              <p className="kicker">Workspace</p>
-              <h2 className="panelTitle">Notebooks</h2>
-            </div>
-            <span className="countPill">{notebookCountLabel}</span>
-          </div>
-
-          <form onSubmit={createNotebook} className="createRow">
-            <input
-              className="input"
-              value={notebookName}
-              onChange={(e) => setNotebookName(e.target.value)}
-              placeholder="Notebook name"
-            />
-            <button className="addButton" aria-label="Create notebook" disabled={!notebookName.trim()}>
-              <Plus size={19} strokeWidth={2.4} />
+      {activeView === "settings" ? (
+        <section className="settingsPage" aria-label="Settings">
+          <div className="settingsHero">
+            <button className="secondary" onClick={() => setActiveView("workspace")} type="button">
+              <ArrowLeft size={16} strokeWidth={2} />
+              Workspace
             </button>
-          </form>
-          <label className="searchWrap">
-            <Search size={15} strokeWidth={2} />
-            <input
-              className="searchInput"
-              value={notebookQuery}
-              onChange={(e) => setNotebookQuery(e.target.value)}
-              placeholder="Search notebooks"
-            />
-          </label>
-
-          <div className="list">
-            {filteredNotebooks.map((notebook) => (
-              <button
-                key={notebook.id}
-                onClick={() => {
-                  setActiveNotebook(notebook);
-                  setMobilePane("notes");
-                }}
-                className={activeNotebook?.id === notebook.id ? "activeItem" : "item"}
-                type="button"
-              >
-                <span>{notebook.name}</span>
-              </button>
-            ))}
-            {!notebooks.length && (
-              <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
-                Create your first notebook
-              </button>
-            )}
-            {!!notebooks.length && !filteredNotebooks.length && (
-              <p className="emptySmall">No notebooks match that search.</p>
-            )}
-          </div>
-        </aside>
-
-        <aside className="notesRail" aria-label="Notes">
-          <div className="panelHeader">
             <div>
-              <p className="kicker">Current notebook</p>
-              <h2 className="panelTitle">{activeNotebook?.name ?? "Notes"}</h2>
-              <p className="railMeta">{noteCountLabel}</p>
+              <p className="kicker">Settings</p>
+              <h2>Account and install settings</h2>
+              <p>{user?.email ?? "Loading account"}</p>
             </div>
+          </div>
+
+          <div className="settingsGrid">
+            <section className="settingsPanel" aria-labelledby="password-title">
+              <div className="settingsPanelHeader">
+                <KeyRound size={18} strokeWidth={2} />
+                <div>
+                  <p className="kicker">Account</p>
+                  <h3 id="password-title">Password</h3>
+                </div>
+              </div>
+              <form className="settingsForm" onSubmit={changePassword}>
+                <label className="fieldGroup">
+                  <span className="fieldLabel">Current password</span>
+                  <input
+                    className="input"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </label>
+                <label className="fieldGroup">
+                  <span className="fieldLabel">New password</span>
+                  <input
+                    className="input"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+                <label className="fieldGroup">
+                  <span className="fieldLabel">Confirm new password</span>
+                  <input
+                    className="input"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+                <button className="primary" type="submit">
+                  Update password
+                </button>
+                {passwordStatus && <p className="successText">{passwordStatus}</p>}
+              </form>
+            </section>
+
+            <section className="settingsPanel" aria-labelledby="install-title">
+              <div className="settingsPanelHeader">
+                <Mail size={18} strokeWidth={2} />
+                <div>
+                  <p className="kicker">Self-hosting</p>
+                  <h3 id="install-title">Email delivery</h3>
+                </div>
+              </div>
+              <p className="settingsCopy">
+                Send a test email to confirm registration and notification mail is configured.
+              </p>
+              <button onClick={sendTestEmail} className="secondary" type="button">
+                <Mail size={16} strokeWidth={2} />
+                Send test email
+              </button>
+            </section>
+          </div>
+        </section>
+      ) : (
+        <>
+          <nav className="mobileSwitcher" aria-label="Workspace panels">
             <button
-              onClick={createNote}
-              className="newNote"
-              disabled={!activeNotebook}
+              className={mobilePane === "notebooks" ? "mobilePaneActive" : "mobilePaneButton"}
+              onClick={() => setMobilePane("notebooks")}
               type="button"
             >
-              <Plus size={16} strokeWidth={2.4} />
-              New
+              <BookOpen size={15} strokeWidth={2.2} />
+              Notebooks
             </button>
-          </div>
-          <label className="searchWrap lightSearch">
-            <Search size={15} strokeWidth={2} />
-            <input
-              className="searchInput"
-              value={noteQuery}
-              onChange={(e) => setNoteQuery(e.target.value)}
-              placeholder="Search notes"
-              disabled={!notes.length}
-            />
-          </label>
+            <button
+              className={mobilePane === "notes" ? "mobilePaneActive" : "mobilePaneButton"}
+              onClick={() => setMobilePane("notes")}
+              type="button"
+            >
+              <FileText size={15} strokeWidth={2.2} />
+              Notes
+            </button>
+            <button
+              className={mobilePane === "editor" ? "mobilePaneActive" : "mobilePaneButton"}
+              onClick={() => setMobilePane("editor")}
+              type="button"
+            >
+              <Save size={15} strokeWidth={2.2} />
+              Editor
+            </button>
+          </nav>
 
-          <div className="list">
-            {filteredNotes.map((note) => {
-              return (
+          <section className={`shell pane-${mobilePane}`}>
+            <aside className="rail" aria-label="Notebooks">
+              <div className="panelHeader">
+                <div>
+                  <p className="kicker">Workspace</p>
+                  <h2 className="panelTitle">Notebooks</h2>
+                </div>
+                <span className="countPill">{notebookCountLabel}</span>
+              </div>
+
+              <form onSubmit={createNotebook} className="createRow">
+                <input
+                  className="input"
+                  value={notebookName}
+                  onChange={(e) => setNotebookName(e.target.value)}
+                  placeholder="Notebook name"
+                />
+                <button className="addButton" aria-label="Create notebook" disabled={!notebookName.trim()}>
+                  <Plus size={19} strokeWidth={2.4} />
+                </button>
+              </form>
+              <label className="searchWrap">
+                <Search size={15} strokeWidth={2} />
+                <input
+                  className="searchInput"
+                  value={notebookQuery}
+                  onChange={(e) => setNotebookQuery(e.target.value)}
+                  placeholder="Search notebooks"
+                />
+              </label>
+
+              <div className="list">
+                {filteredNotebooks.map((notebook) => (
+                  <div
+                    key={notebook.id}
+                    className={activeNotebook?.id === notebook.id ? "notebookRowActive" : "notebookRow"}
+                  >
+                    <button
+                      onClick={() => {
+                        setActiveNotebook(notebook);
+                        setMobilePane("notes");
+                      }}
+                      className="notebookSelect"
+                      type="button"
+                    >
+                      <span>{notebook.name}</span>
+                    </button>
+                    <button
+                      onClick={() => setPendingNotebookDelete(notebook.id)}
+                      className="rowIconButton"
+                      type="button"
+                      aria-label={`Delete ${notebook.name}`}
+                      title={`Delete ${notebook.name}`}
+                    >
+                      <Trash2 size={14} strokeWidth={2} />
+                    </button>
+                    {pendingNotebookDelete === notebook.id && (
+                      <div className="inlineConfirm">
+                        <span>Delete notebook and its notes?</span>
+                        <button className="secondary" onClick={() => setPendingNotebookDelete(null)} type="button">
+                          Cancel
+                        </button>
+                        <button className="dangerButton" onClick={() => deleteNotebook(notebook.id)} type="button">
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {!notebooks.length && (
+                  <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
+                    Create your first notebook
+                  </button>
+                )}
+                {!!notebooks.length && !filteredNotebooks.length && (
+                  <p className="emptySmall">No notebooks match that search.</p>
+                )}
+              </div>
+            </aside>
+
+            <aside className="notesRail" aria-label="Notes">
+              <div className="panelHeader">
+                <div>
+                  <p className="kicker">Current notebook</p>
+                  <h2 className="panelTitle">{activeNotebook?.name ?? "Notes"}</h2>
+                  <p className="railMeta">{noteCountLabel}</p>
+                </div>
                 <button
-                  key={note.id}
-                  onClick={() => {
-                    setActiveNote(note);
-                    setMobilePane("editor");
-                  }}
-                  className={activeNote?.id === note.id ? "noteActive" : "noteItem"}
+                  onClick={createNote}
+                  className="newNote"
+                  disabled={!activeNotebook}
                   type="button"
                 >
-                  <span>{noteTitle(note).slice(0, 70)}</span>
-                  <small>{notePreview(note).slice(0, 90)}</small>
-                  {note.updated_at && <small>{compactDate(note.updated_at)}</small>}
+                  <Plus size={16} strokeWidth={2.4} />
+                  New
                 </button>
-              );
-            })}
-            {!notes.length && (
-              <button className="emptyAction" onClick={createNote} disabled={!activeNotebook} type="button">
-                Create your first note
-              </button>
-            )}
-            {!!notes.length && !filteredNotes.length && <p className="emptySmall">No notes match that search.</p>}
-          </div>
-        </aside>
-
-        <section className="editorPanel" aria-label="Editor">
-          {activeNote ? (
-            <>
-              <div className="editorTop">
-                <div>
-                  <p className="kicker">{activeNotebook?.name ?? "Editor"}</p>
-                  <h2 className="editorTitle">
-                    {noteParts.title.trim() || "Untitled"}
-                  </h2>
-                  <p className="editorMeta">
-                    <Clock3 size={14} strokeWidth={2} />
-                    {displayStatus}
-                  </p>
-                </div>
-                <div className="editorActions">
-                  <button onClick={() => setPendingDelete(true)} className="dangerButton" type="button">
-                    <Trash2 size={15} strokeWidth={2} />
-                    Delete
-                  </button>
-                  <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button">
-                    <Save size={15} strokeWidth={2} />
-                    Save now
-                  </button>
-                </div>
               </div>
-              {pendingDelete && (
-                <div className="deleteConfirm" role="alert">
-                  <span>Delete this note permanently?</span>
-                  <button className="secondary" onClick={() => setPendingDelete(false)} type="button">
-                    Cancel
+              <label className="searchWrap lightSearch">
+                <Search size={15} strokeWidth={2} />
+                <input
+                  className="searchInput"
+                  value={noteQuery}
+                  onChange={(e) => setNoteQuery(e.target.value)}
+                  placeholder="Search notes"
+                  disabled={!notes.length}
+                />
+              </label>
+
+              <div className="list">
+                {filteredNotes.map((note) => {
+                  return (
+                    <button
+                      key={note.id}
+                      onClick={() => {
+                        setActiveNote(note);
+                        setMobilePane("editor");
+                      }}
+                      className={activeNote?.id === note.id ? "noteActive" : "noteItem"}
+                      type="button"
+                    >
+                      <span>{noteTitle(note).slice(0, 70)}</span>
+                      <small>{notePreview(note).slice(0, 90)}</small>
+                      {note.updated_at && <small>{compactDate(note.updated_at)}</small>}
+                    </button>
+                  );
+                })}
+                {!notes.length && (
+                  <button className="emptyAction" onClick={createNote} disabled={!activeNotebook} type="button">
+                    Create your first note
                   </button>
-                  <button className="dangerButton" onClick={deleteActiveNote} type="button">
-                    Delete
-                  </button>
+                )}
+                {!!notes.length && !filteredNotes.length && <p className="emptySmall">No notes match that search.</p>}
+              </div>
+            </aside>
+
+            <section className="editorPanel" aria-label="Editor">
+              {activeNote ? (
+                <>
+                  <div className="editorTop">
+                    <div>
+                      <p className="kicker">{activeNotebook?.name ?? "Editor"}</p>
+                      <h2 className="editorTitle">
+                        {noteParts.title.trim() || "Untitled"}
+                      </h2>
+                      <p className="editorMeta">
+                        <Clock3 size={14} strokeWidth={2} />
+                        {displayStatus}
+                      </p>
+                    </div>
+                    <div className="editorActions">
+                      <button onClick={() => setPendingDelete(true)} className="dangerButton" type="button">
+                        <Trash2 size={15} strokeWidth={2} />
+                        Delete
+                      </button>
+                      <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button">
+                        <Save size={15} strokeWidth={2} />
+                        Save now
+                      </button>
+                    </div>
+                  </div>
+                  {pendingDelete && (
+                    <div className="deleteConfirm" role="alert">
+                      <span>Delete this note permanently?</span>
+                      <button className="secondary" onClick={() => setPendingDelete(false)} type="button">
+                        Cancel
+                      </button>
+                      <button className="dangerButton" onClick={deleteActiveNote} type="button">
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    className="titleInput"
+                    value={noteParts.title}
+                    onChange={(e) => updateNoteTitle(e.target.value)}
+                    placeholder="Untitled"
+                  />
+                  <textarea
+                    className="editor"
+                    value={noteParts.body}
+                    onChange={(e) => updateNoteBody(e.target.value)}
+                    placeholder="Start writing..."
+                  />
+                  <footer className="editorFooter" aria-label="Note details">
+                    <span>{bodyWordCount} {bodyWordCount === 1 ? "word" : "words"}</span>
+                    <span>{noteParts.body.length} characters</span>
+                    <span>{displayStatus}</span>
+                  </footer>
+                </>
+              ) : (
+                <div className="emptyState">
+                  <div className="emptyPrompt">
+                    <p className="kicker">{activeNotebook?.name ?? "Notebook"}</p>
+                    <h2>Start a note</h2>
+                    <p>Capture a thought, meeting, project plan, or working draft.</p>
+                    <button className="primary emptyStateButton" onClick={createNote} disabled={!activeNotebook} type="button">
+                      <Plus size={16} strokeWidth={2.4} />
+                      New note
+                    </button>
+                  </div>
+                  <div className="emptyPreview" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
                 </div>
               )}
-              <input
-                className="titleInput"
-                value={noteParts.title}
-                onChange={(e) => updateNoteTitle(e.target.value)}
-                placeholder="Untitled"
-              />
-              <textarea
-                className="editor"
-                value={noteParts.body}
-                onChange={(e) => updateNoteBody(e.target.value)}
-                placeholder="Start writing..."
-              />
-              <footer className="editorFooter" aria-label="Note details">
-                <span>{bodyWordCount} {bodyWordCount === 1 ? "word" : "words"}</span>
-                <span>{noteParts.body.length} characters</span>
-                <span>{displayStatus}</span>
-              </footer>
-            </>
-          ) : (
-            <div className="emptyState">
-              <div className="emptyPrompt">
-                <p className="kicker">{activeNotebook?.name ?? "Notebook"}</p>
-                <h2>Start a note</h2>
-                <p>Capture a thought, meeting, project plan, or working draft.</p>
-                <button className="primary emptyStateButton" onClick={createNote} disabled={!activeNotebook} type="button">
-                  <Plus size={16} strokeWidth={2.4} />
-                  New note
-                </button>
-              </div>
-              <div className="emptyPreview" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
-          )}
-        </section>
-      </section>
+            </section>
+          </section>
+        </>
+      )}
     </main>
   );
 }

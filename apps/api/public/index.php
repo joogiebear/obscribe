@@ -539,6 +539,31 @@ try {
         ]);
     }
 
+    if ($method === 'POST' && $path === '/me/password') {
+        $data = input();
+        require_fields($data, ['current_password', 'new_password']);
+
+        if (!password_verify((string) $data['current_password'], $user['password_hash'])) {
+            json_response(['message' => 'Current password is incorrect.'], 422);
+        }
+
+        if (strlen((string) $data['new_password']) < 8) {
+            json_response(['message' => 'New password must be at least 8 characters.'], 422);
+        }
+
+        $stmt = db()->prepare(
+            'UPDATE users
+             SET password_hash = :password_hash, updated_at = now()
+             WHERE id = :id',
+        );
+        $stmt->execute([
+            'id' => $user['id'],
+            'password_hash' => password_hash((string) $data['new_password'], PASSWORD_DEFAULT),
+        ]);
+
+        json_response(['updated' => true]);
+    }
+
     if ($method === 'POST' && $path === '/mail/test') {
         $mail = send_test_email($user);
         json_response([
