@@ -1,13 +1,67 @@
 # Obscribe
 
-Monorepo for Obscribe SaaS + self-hosted notebook app.
+Self-hostable notebook workspace with a hosted SaaS path.
 
-## Structure
-- apps/web (Next.js)
-- apps/api (Laravel 13)
-- infra (docker + ansible)
+## What Runs Today
 
-## Quick Start
+- `apps/web`: Next.js notes workspace
+- `apps/api`: lightweight PHP API for auth, workspaces, notebooks, and notes
+- `docker-compose.yml`: local development
+- `docker-compose.prod.yml`: single-server self-host install
+- `scripts/deploy.sh`: repeatable Bash deploy for one server
+
+The API intentionally matches the current product contract while the larger Laravel backend is still being built out.
+
+## Local Development
+
 ```bash
 docker compose up -d
 ```
+
+Open `http://localhost:3000`.
+
+## Single-Server Self-Host Install
+
+On an Ubuntu server with Docker Engine and Docker Compose v2:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh | bash
+```
+
+The installer clones Obscribe into `/opt/obscribe`, creates `.env` from `.env.example`, generates database and object-storage secrets, builds the containers, and starts the stack.
+
+Before public launch, edit `/opt/obscribe/.env`:
+
+```env
+APP_DOMAIN=notes.example.com
+ACME_EMAIL=admin@example.com
+APP_URL=https://notes.example.com
+NEXT_PUBLIC_APP_URL=https://notes.example.com
+NEXT_PUBLIC_API_BASE_URL=/api
+```
+
+Then rerun:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh | bash
+```
+
+Optional installer settings:
+
+```bash
+OBSCRIBE_HOME=/srv/obscribe OBSCRIBE_REPO_REF=main \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
+```
+
+## Production Services
+
+- Caddy reverse proxy with automatic TLS
+- Next.js web app
+- PHP API
+- PostgreSQL
+- Redis
+- MinIO-compatible object storage placeholder
+
+## SaaS Direction
+
+Keep the single-server install as the baseline until backups, upgrades, health checks, auth, billing, and tenant scoping are proven. The later hosted service can split this same topology into load-balanced web/API workers, managed PostgreSQL, managed Redis, and external object storage without changing the product contract.

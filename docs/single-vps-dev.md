@@ -69,6 +69,14 @@ Restart containers
 Health check
 ```
 
+The current repo includes the first deploy implementation:
+
+```bash
+./scripts/deploy.sh
+```
+
+It uses `docker-compose.prod.yml` to run Caddy, web, API, PostgreSQL, Redis, and MinIO on one machine.
+
 ## Domain Setup
 
 Recommended dev/staging domains:
