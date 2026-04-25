@@ -275,6 +275,10 @@ configure_smtp() {
   smtp_port="${smtp_port:-587}"
   smtp_username="${OBSCRIBE_SMTP_USERNAME:-$(prompt_value "SMTP username" "$(get_env_value MAIL_USERNAME)")}"
   smtp_password="${OBSCRIBE_SMTP_PASSWORD:-$(prompt_secret "SMTP password: " "$(get_env_value MAIL_PASSWORD)")}"
+  if [ -z "${smtp_password}" ]; then
+    echo "SMTP password cannot be empty. Re-run SMTP setup after confirming the mailbox password."
+    exit 1
+  fi
   smtp_encryption="${OBSCRIBE_SMTP_ENCRYPTION:-$(prompt_value "SMTP encryption (tls, ssl, or none)" "$(get_env_value MAIL_ENCRYPTION)")}"
   smtp_encryption="${smtp_encryption:-tls}"
   mail_from="${OBSCRIBE_MAIL_FROM:-$(prompt_value "From email address" "$(get_env_value MAIL_FROM_ADDRESS)")}"
