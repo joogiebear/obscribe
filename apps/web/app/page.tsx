@@ -22,6 +22,7 @@ import {
   ListChecks,
   LogOut,
   Mail,
+  Moon,
   PenLine,
   Plus,
   Quote,
@@ -30,6 +31,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sun,
   Trash2,
   Upload,
   Users,
@@ -39,6 +41,7 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type AuthMode = "login" | "register" | "forgot" | "reset";
+type ThemeMode = "light" | "dark";
 type User = { id: number; name: string; email: string };
 type Workspace = { id: number; name: string };
 type Notebook = { id: number; workspace_id: number; name: string };
@@ -279,6 +282,8 @@ export default function Home() {
   const [editorMode, setEditorMode] = useState<"write" | "preview">("write");
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [themeReady, setThemeReady] = useState(false);
   const globalSearchRef = useRef<HTMLInputElement | null>(null);
   const templateSearchRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -402,6 +407,11 @@ export default function Home() {
     const saved = localStorage.getItem("obscribe_token");
     if (saved) setToken(saved);
 
+    const savedTheme = localStorage.getItem("obscribe_theme") === "dark" ? "dark" : "light";
+    setTheme(savedTheme);
+    document.documentElement.dataset.theme = savedTheme;
+    setThemeReady(true);
+
     const params = new URLSearchParams(window.location.search);
     const urlResetToken = params.get("reset_token");
     if (urlResetToken) {
@@ -410,6 +420,12 @@ export default function Home() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    if (!themeReady) return;
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("obscribe_theme", theme);
+  }, [theme, themeReady]);
 
   useEffect(() => {
     if (!token) return;
@@ -515,6 +531,10 @@ export default function Home() {
   function closeTemplateDialog() {
     setTemplateDialogOpen(false);
     setTemplateQuery("");
+  }
+
+  function toggleTheme() {
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
   }
 
   async function auth(e: FormEvent) {
@@ -1218,6 +1238,15 @@ export default function Home() {
             </div>
           )}
         </div>
+        <button
+          onClick={toggleTheme}
+          className="iconButton themeButton"
+          type="button"
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={theme === "dark" ? "Light mode" : "Dark mode"}
+        >
+          {theme === "dark" ? <Sun size={17} strokeWidth={2} /> : <Moon size={17} strokeWidth={2} />}
+        </button>
         <button
           onClick={() => setActiveView("settings")}
           className="iconButton"

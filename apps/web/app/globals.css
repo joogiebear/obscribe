@@ -19,6 +19,27 @@
   --shadow-soft: 0 22px 60px rgba(24, 32, 28, 0.1);
 }
 
+:root[data-theme="dark"] {
+  --ink: #eef4ef;
+  --ink-soft: #d1ddd4;
+  --muted: #9aa99f;
+  --faint: #718177;
+  --paper: #101712;
+  --paper-strong: #0b100d;
+  --wash: #080d0a;
+  --wash-2: #172119;
+  --line: #2d3a32;
+  --line-soft: #202a24;
+  --brand: #5ac4ad;
+  --brand-strong: #1d6d5f;
+  --brand-rail: #0c1712;
+  --brand-soft: #132821;
+  --accent: #d28a5f;
+  --danger: #ff8aa3;
+  --danger-wash: #2a1019;
+  --shadow-soft: 0 22px 70px rgba(0, 0, 0, 0.42);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -402,7 +423,7 @@ textarea:focus-visible {
 .topbar {
   height: 58px;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, 560px) 38px 38px;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 560px) 38px 38px 38px;
   align-items: center;
   gap: 9px;
   padding: 0 22px;
@@ -1671,6 +1692,205 @@ small {
   width: 62%;
 }
 
+:root[data-theme="dark"] .loginPage {
+  background:
+    linear-gradient(90deg, rgba(3, 9, 7, 0.96), rgba(9, 34, 29, 0.82)),
+    url("https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1800&q=80");
+  background-size: cover;
+  background-position: center;
+}
+
+:root[data-theme="dark"] .loginCard,
+:root[data-theme="dark"] .topbar,
+:root[data-theme="dark"] .editorTop {
+  background: rgba(13, 19, 15, 0.94);
+  border-color: var(--line-soft);
+}
+
+:root[data-theme="dark"] .loginCard {
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.46);
+}
+
+:root[data-theme="dark"] .tabs,
+:root[data-theme="dark"] .editorModeToggle,
+:root[data-theme="dark"] .mobileSwitcher {
+  background: #121b15;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .tab:hover,
+:root[data-theme="dark"] .globalSearchResults button:hover,
+:root[data-theme="dark"] .notebookRow:hover,
+:root[data-theme="dark"] .noteItem:hover,
+:root[data-theme="dark"] .templateChoice:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme="dark"] .tabActive,
+:root[data-theme="dark"] .editorModeToggle .editorModeActive,
+:root[data-theme="dark"] .mobilePaneActive {
+  background: #e7f2eb;
+  color: #101712;
+}
+
+:root[data-theme="dark"] .primary,
+:root[data-theme="dark"] .addButton,
+:root[data-theme="dark"] .newNote {
+  background: var(--brand-strong);
+  color: #f5fff9;
+}
+
+:root[data-theme="dark"] .primary:not(:disabled):hover,
+:root[data-theme="dark"] .addButton:not(:disabled):hover,
+:root[data-theme="dark"] .newNote:not(:disabled):hover {
+  background: #268a78;
+}
+
+:root[data-theme="dark"] .secondary,
+:root[data-theme="dark"] .input,
+:root[data-theme="dark"] .searchWrap,
+:root[data-theme="dark"] .lightSearch,
+:root[data-theme="dark"] .globalSearch,
+:root[data-theme="dark"] .templateLauncher,
+:root[data-theme="dark"] .templateDialogSearch,
+:root[data-theme="dark"] .renameNotebookForm input,
+:root[data-theme="dark"] .renameNotebookForm button,
+:root[data-theme="dark"] .emptyAction {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: var(--line);
+  color: var(--ink-soft);
+}
+
+:root[data-theme="dark"] .input:hover,
+:root[data-theme="dark"] .input:focus,
+:root[data-theme="dark"] .globalSearch:focus-within,
+:root[data-theme="dark"] .secondary:not(:disabled):hover,
+:root[data-theme="dark"] .iconButton:not(:disabled):hover,
+:root[data-theme="dark"] .templateLauncher:hover,
+:root[data-theme="dark"] .renameNotebookForm button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: #415248;
+  color: var(--ink);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .themeButton {
+  border-color: #324239;
+  background: #14211a;
+  color: #f2c66d;
+}
+
+:root[data-theme="dark"] .globalSearch input,
+:root[data-theme="dark"] .templateDialogSearch input,
+:root[data-theme="dark"] .titleInput,
+:root[data-theme="dark"] .editor,
+:root[data-theme="dark"] .markdownPreview {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .globalSearch > span,
+:root[data-theme="dark"] .templateChoice em,
+:root[data-theme="dark"] .templateChoiceActive em {
+  background: #121b15;
+  border-color: var(--line-soft);
+}
+
+:root[data-theme="dark"] .globalSearchResults,
+:root[data-theme="dark"] .settingsPanel,
+:root[data-theme="dark"] .templateDialog,
+:root[data-theme="dark"] .templateDetail,
+:root[data-theme="dark"] .notebookRowActive,
+:root[data-theme="dark"] .noteActive {
+  background: #101712;
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="dark"] .settingsPage,
+:root[data-theme="dark"] .editorPanel {
+  background:
+    linear-gradient(90deg, rgba(90, 196, 173, 0.045), transparent 24%),
+    var(--paper-strong);
+}
+
+:root[data-theme="dark"] .shell {
+  background: var(--paper-strong);
+}
+
+:root[data-theme="dark"] .rail,
+:root[data-theme="dark"] .notesRail,
+:root[data-theme="dark"] .templateChoiceList {
+  background: #0f1611;
+  border-color: var(--line-soft);
+}
+
+:root[data-theme="dark"] .templateOverlay {
+  background: rgba(0, 0, 0, 0.58);
+}
+
+:root[data-theme="dark"] .templateDialog {
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.62);
+}
+
+:root[data-theme="dark"] .templateChoiceActive {
+  background: #142019;
+  border-color: #35584c;
+}
+
+:root[data-theme="dark"] .templateDetailIcon {
+  background: #122a22;
+  border-color: #21483d;
+}
+
+:root[data-theme="dark"] .editorToolbar {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: var(--line-soft);
+}
+
+:root[data-theme="dark"] .editorToolbar > button:hover,
+:root[data-theme="dark"] .editorModeToggle button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .markdownPreview pre {
+  background: #0b120e;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .previewCheck span {
+  background: #0b120e;
+  border-color: #435449;
+}
+
+:root[data-theme="dark"] .emptyPreview span {
+  background: linear-gradient(90deg, #202d25, rgba(32, 45, 37, 0));
+}
+
+:root[data-theme="dark"] .emptyPreview span:first-child {
+  background: linear-gradient(90deg, #31433a, rgba(49, 67, 58, 0));
+}
+
+:root[data-theme="dark"] .dangerButton,
+:root[data-theme="dark"] .deleteConfirm,
+:root[data-theme="dark"] .inlineConfirm {
+  background: var(--danger-wash);
+  border-color: #593040;
+}
+
+:root[data-theme="dark"] .dangerButton:not(:disabled):hover {
+  background: #3a1522;
+  border-color: #774056;
+}
+
+:root[data-theme="dark"] .inlineConfirm p span {
+  color: #ffb6c6;
+}
+
+:root[data-theme="dark"] .inlineConfirm small {
+  color: #d48aa0;
+}
+
 @media (max-width: 1060px) {
   .loginPage {
     grid-template-columns: 1fr;
@@ -1713,7 +1933,7 @@ small {
 
   .topbar {
     height: auto;
-    grid-template-columns: minmax(0, 1fr) 38px 38px;
+    grid-template-columns: minmax(0, 1fr) 38px 38px 38px;
     row-gap: 8px;
     padding: 8px 12px;
   }
