@@ -751,6 +751,8 @@ export default function Home() {
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const targetNoteIdRef = useRef<number | null>(null);
+  const activeNoteIdRef = useRef<number | null>(null);
+  const contentRef = useRef("");
 
   const headers = useMemo(
     () => ({
@@ -833,21 +835,26 @@ export default function Home() {
 
   const saveNote = useCallback(
     async (value: string) => {
-      if (!activeNote) return;
+      if (!activeNote) return false;
+      const noteId = activeNote.id;
 
       try {
         setStatus("Saving...");
-        const note = await api<Note>(`/notes/${activeNote.id}`, {
+        const note = await api<Note>(`/notes/${noteId}`, {
           method: "PUT",
           body: JSON.stringify({ content: value }),
         });
-        setActiveNote(note);
+        if (activeNoteIdRef.current === note.id) {
+          setActiveNote(note);
+        }
         setNotes((current) => current.map((n) => (n.id === note.id ? note : n)));
         setStatus("Saved");
         setLastSavedAt(new Date());
+        return true;
       } catch (err) {
         setStatus("Save failed");
         setError(err instanceof Error ? err.message : "Unable to save note");
+        return false;
       }
     },
     [activeNote, api],
@@ -910,6 +917,14 @@ export default function Home() {
   }, [activeView, loadAppStatus, token, user?.is_admin]);
 
   useEffect(() => {
+    activeNoteIdRef.current = activeNote?.id ?? null;
+  }, [activeNote?.id]);
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+
+  useEffect(() => {
     if (!activeNotebook) {
       setNotes([]);
       setActiveNote(null);
@@ -937,6 +952,29 @@ export default function Home() {
     }, 900);
 
     return () => window.clearTimeout(timer);
+  }, [activeNote, content, saveNote]);
+
+  useEffect(() => {
+    const isDirtyNow = Boolean(activeNote && (activeNote.content || "") !== content);
+    if (!isDirtyNow) return;
+
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        void saveNote(contentRef.current);
+      }
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [activeNote, content, saveNote]);
 
   useEffect(() => {
@@ -1000,6 +1038,11 @@ export default function Home() {
 
   function toggleTheme() {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
+  }
+
+  async function flushActiveNote() {
+    if (!activeNote || (activeNote.content || "") === content) return true;
+    return saveNote(content);
   }
 
   async function auth(e: FormEvent) {
@@ -1095,6 +1138,7 @@ export default function Home() {
 
   async function createNotebookNamed(value: string, templateKey: NotebookTemplateKey | "" = "") {
     try {
+      if (!(await flushActiveNote())) return;
       const notebook = await createNotebookRecord(value, templateKey);
       if (!notebook) return;
       setNotebookName("");
@@ -1120,6 +1164,7 @@ export default function Home() {
     if (!targetNotebook) return;
 
     try {
+      if (!(await flushActiveNote())) return;
       const switchingNotebooks = activeNotebook?.id !== targetNotebook.id;
       const note = await api<Note>(`/notebooks/${targetNotebook.id}/notes`, {
         method: "POST",
@@ -1141,6 +1186,28 @@ export default function Home() {
     await createNotebookNamed(template.name, template.key);
   }
 
+  async function selectNotebook(notebook: Notebook) {
+    if (activeNotebook?.id === notebook.id) {
+      setMobilePane("notes");
+      return;
+    }
+
+    if (!(await flushActiveNote())) return;
+    setActiveNotebook(notebook);
+    setMobilePane("notes");
+  }
+
+  async function selectNote(note: Note) {
+    if (activeNote?.id === note.id) {
+      setMobilePane("editor");
+      return;
+    }
+
+    if (!(await flushActiveNote())) return;
+    setActiveNote(note);
+    setMobilePane("editor");
+  }
+
   async function deleteActiveNote() {
     if (!activeNote) return;
 
@@ -1158,6 +1225,7 @@ export default function Home() {
 
   async function deleteNotebook(id: number) {
     try {
+      if (activeNotebook?.id !== id && !(await flushActiveNote())) return;
       await api<{ deleted: boolean }>(`/notebooks/${id}`, { method: "DELETE" });
       const remaining = notebooks.filter((notebook) => notebook.id !== id);
       setNotebooks(remaining);
@@ -1243,6 +1311,7 @@ export default function Home() {
 
   async function exportWorkspace() {
     try {
+      if (!(await flushActiveNote())) return;
       setExportStatus("Preparing export...");
       const data = await api<WorkspaceExport>("/workspace/export");
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -1266,6 +1335,7 @@ export default function Home() {
     if (!file) return;
 
     try {
+      if (!(await flushActiveNote())) return;
       setImportStatus("Importing workspace...");
       const raw = await file.text();
       const payload = JSON.parse(raw) as WorkspaceExport;
@@ -1291,6 +1361,7 @@ export default function Home() {
 
   async function openSearchNote(note: SearchNote) {
     try {
+      if (!(await flushActiveNote())) return;
       const notebook =
         notebooks.find((item) => item.id === note.notebook_id) ??
         {
@@ -1302,6 +1373,10 @@ export default function Home() {
       setMobilePane("editor");
       setGlobalQuery("");
       setSearchResults(null);
+
+      if (activeNote?.id === note.id) {
+        return;
+      }
 
       if (activeNotebook?.id === note.notebook_id) {
         setActiveNote(notes.find((item) => item.id === note.id) ?? note);
@@ -1315,7 +1390,8 @@ export default function Home() {
     }
   }
 
-  function openSearchNotebook(notebook: Notebook) {
+  async function openSearchNotebook(notebook: Notebook) {
+    if (!(await flushActiveNote())) return;
     setActiveView("workspace");
     setActiveNotebook(notebook);
     setMobilePane("notes");
@@ -2134,10 +2210,7 @@ export default function Home() {
                       </form>
                     ) : (
                       <button
-                        onClick={() => {
-                          setActiveNotebook(notebook);
-                          setMobilePane("notes");
-                        }}
+                        onClick={() => selectNotebook(notebook)}
                         className="notebookSelect"
                         type="button"
                       >
@@ -2228,10 +2301,7 @@ export default function Home() {
                   return (
                     <button
                       key={note.id}
-                      onClick={() => {
-                        setActiveNote(note);
-                        setMobilePane("editor");
-                      }}
+                      onClick={() => selectNote(note)}
                       className={activeNote?.id === note.id ? "noteActive" : "noteItem"}
                       type="button"
                     >
