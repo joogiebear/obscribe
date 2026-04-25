@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 backups/
+support/
 .env
 .env.local
 .env.*.local

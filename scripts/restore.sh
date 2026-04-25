@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env"
 COMPOSE_FILE="${ROOT_DIR}/docker-compose.prod.yml"
 BACKUP_ARCHIVE="${1:-}"
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "${ROOT_DIR}" | tr '[:upper:]' '[:lower:]')}"
 
 cd "${ROOT_DIR}"
 
@@ -47,6 +48,21 @@ fi
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d db
 echo "Restoring database..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T db psql -U "${DB_USER}" -d "${DB_NAME}" < "${EXTRACTED_DIR}/postgres.sql"
+
+restore_volume() {
+  local archive="$1"
+  local volume="$2"
+
+  if [ -f "${EXTRACTED_DIR}/${archive}" ]; then
+    echo "Restoring volume ${volume}..."
+    docker volume create "${volume}" >/dev/null
+    docker run --rm -v "${volume}:/volume" -v "${EXTRACTED_DIR}:/backup:ro" busybox sh -c "cd /volume && rm -rf ./* ./.??* 2>/dev/null || true && tar -xf /backup/${archive}"
+  fi
+}
+
+restore_volume "minio.tar" "${PROJECT_NAME}_obscribe_minio"
+restore_volume "caddy-data.tar" "${PROJECT_NAME}_caddy_data"
+restore_volume "caddy-config.tar" "${PROJECT_NAME}_caddy_config"
 
 echo "Restarting application..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d

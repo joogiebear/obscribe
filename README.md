@@ -133,9 +133,10 @@ From `/opt/obscribe` on the server:
 bash scripts/status.sh
 bash scripts/backup.sh
 bash scripts/restore.sh /opt/obscribe/backups/obscribe-backup-YYYYmmddHHMMSS.tar.gz
+bash scripts/logs.sh
 ```
 
-Backups include a PostgreSQL dump, a copy of `.env`, and a small service inventory. The restore command asks for explicit confirmation before replacing the database.
+Backups include a PostgreSQL dump, object-storage volume data when present, Caddy certificate/config volumes, a copy of `.env`, and a small service inventory. The restore command asks for explicit confirmation before replacing the database. Support bundles redact secrets before saving environment details.
 
 ## SaaS Direction
 
