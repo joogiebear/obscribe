@@ -42,6 +42,42 @@ COMPOSE_FILE="${ROOT_DIR}/docker-compose.prod.yml"
 
 cd "${ROOT_DIR}"
 
+prompt_value() {
+  local prompt="$1"
+  local default="$2"
+  local value=""
+
+  if [ -t 0 ]; then
+    read -r -p "${prompt} [${default}]: " value
+  fi
+
+  printf '%s' "${value:-$default}"
+}
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  local escaped
+
+  escaped="$(printf '%s' "${value}" | sed 's/[\/&|]/\\&/g')"
+
+  if grep -q "^${key}=" "${ENV_FILE}"; then
+    sed -i "s|^${key}=.*|${key}=${escaped}|" "${ENV_FILE}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
+}
+
+domain_to_mail_from() {
+  local domain="$1"
+
+  if [ "${domain}" = "localhost" ]; then
+    printf '%s' "no-reply@obscribe.local"
+  else
+    printf '%s' "no-reply@${domain}"
+  fi
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required. Install Docker Engine and run this script again."
   exit 1
@@ -54,22 +90,74 @@ fi
 
 if [ ! -f "${ENV_FILE}" ]; then
   cp "${ROOT_DIR}/.env.example" "${ENV_FILE}"
+  DEFAULT_DOMAIN="${OBSCRIBE_DOMAIN:-localhost}"
+  DEFAULT_ACME_EMAIL="${OBSCRIBE_ACME_EMAIL:-admin@example.com}"
+  APP_DOMAIN="$(prompt_value "Public domain for Obscribe" "${DEFAULT_DOMAIN}")"
+
+  if [ "${APP_DOMAIN}" = "localhost" ]; then
+    DEFAULT_ACME_EMAIL="${OBSCRIBE_ACME_EMAIL:-admin@example.com}"
+    APP_SCHEME="http"
+  else
+    DEFAULT_ACME_EMAIL="${OBSCRIBE_ACME_EMAIL:-admin@${APP_DOMAIN}}"
+    APP_SCHEME="https"
+  fi
+
+  ACME_EMAIL="$(prompt_value "Email for SSL certificate notices" "${DEFAULT_ACME_EMAIL}")"
+  MAIL_FROM_ADDRESS="${OBSCRIBE_MAIL_FROM:-$(domain_to_mail_from "${APP_DOMAIN}")}"
   DB_PASSWORD="$(openssl rand -hex 24 2>/dev/null || date +%s | sha256sum | cut -d' ' -f1)"
   AWS_SECRET="$(openssl rand -hex 24 2>/dev/null || date +%s%N | sha256sum | cut -d' ' -f1)"
-  sed -i "s/^APP_ENV=.*/APP_ENV=production/" "${ENV_FILE}"
-  sed -i "s/^APP_URL=.*/APP_URL=http:\/\/localhost/" "${ENV_FILE}"
-  sed -i "s/^NEXT_PUBLIC_APP_URL=.*/NEXT_PUBLIC_APP_URL=http:\/\/localhost/" "${ENV_FILE}"
-  sed -i "s/^NEXT_PUBLIC_API_URL=.*/NEXT_PUBLIC_API_URL=\/api/" "${ENV_FILE}"
-  sed -i "s/^NEXT_PUBLIC_API_BASE_URL=.*/NEXT_PUBLIC_API_BASE_URL=\/api/" "${ENV_FILE}"
-  sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/" "${ENV_FILE}"
-  sed -i "s/^AWS_SECRET_ACCESS_KEY=.*/AWS_SECRET_ACCESS_KEY=${AWS_SECRET}/" "${ENV_FILE}"
-  {
-    echo ""
-    echo "# Public domain for the single-server reverse proxy."
-    echo "APP_DOMAIN=localhost"
-    echo "ACME_EMAIL=admin@example.com"
-  } >> "${ENV_FILE}"
-  echo "Created .env. Edit APP_DOMAIN, ACME_EMAIL, APP_URL, and NEXT_PUBLIC_APP_URL before public launch."
+  APP_URL="${APP_SCHEME}://${APP_DOMAIN}"
+
+  set_env_value "APP_ENV" "production"
+  set_env_value "APP_DOMAIN" "${APP_DOMAIN}"
+  set_env_value "ACME_EMAIL" "${ACME_EMAIL}"
+  set_env_value "APP_URL" "${APP_URL}"
+  set_env_value "NEXT_PUBLIC_APP_URL" "${APP_URL}"
+  set_env_value "NEXT_PUBLIC_API_URL" "/api"
+  set_env_value "NEXT_PUBLIC_API_BASE_URL" "/api"
+  set_env_value "API_URL" "${APP_URL}/api"
+  set_env_value "SESSION_DOMAIN" "${APP_DOMAIN}"
+  set_env_value "SANCTUM_STATEFUL_DOMAINS" "${APP_DOMAIN}"
+  set_env_value "MAIL_FROM_ADDRESS" "${MAIL_FROM_ADDRESS}"
+  set_env_value "DB_PASSWORD" "${DB_PASSWORD}"
+  set_env_value "AWS_SECRET_ACCESS_KEY" "${AWS_SECRET}"
+
+  echo "Created .env for ${APP_URL}."
+  if [ "${APP_DOMAIN}" != "localhost" ]; then
+    echo "Make sure DNS for ${APP_DOMAIN} points to this server and ports 80/443 are open for SSL."
+  fi
+else
+  if [ -n "${OBSCRIBE_DOMAIN:-}" ] || [ -n "${OBSCRIBE_ACME_EMAIL:-}" ] || [ -n "${OBSCRIBE_MAIL_FROM:-}" ]; then
+    CURRENT_DOMAIN="$(grep '^APP_DOMAIN=' "${ENV_FILE}" | cut -d= -f2- || true)"
+    APP_DOMAIN="${OBSCRIBE_DOMAIN:-${CURRENT_DOMAIN:-localhost}}"
+
+    if [ "${APP_DOMAIN}" = "localhost" ]; then
+      APP_SCHEME="http"
+      DEFAULT_ACME_EMAIL="admin@example.com"
+    else
+      APP_SCHEME="https"
+      DEFAULT_ACME_EMAIL="admin@${APP_DOMAIN}"
+    fi
+
+    ACME_EMAIL="${OBSCRIBE_ACME_EMAIL:-$(grep '^ACME_EMAIL=' "${ENV_FILE}" | cut -d= -f2- || true)}"
+    ACME_EMAIL="${ACME_EMAIL:-$DEFAULT_ACME_EMAIL}"
+    MAIL_FROM_ADDRESS="${OBSCRIBE_MAIL_FROM:-$(grep '^MAIL_FROM_ADDRESS=' "${ENV_FILE}" | cut -d= -f2- || true)}"
+    MAIL_FROM_ADDRESS="${MAIL_FROM_ADDRESS:-$(domain_to_mail_from "${APP_DOMAIN}")}"
+    APP_URL="${APP_SCHEME}://${APP_DOMAIN}"
+
+    set_env_value "APP_DOMAIN" "${APP_DOMAIN}"
+    set_env_value "ACME_EMAIL" "${ACME_EMAIL}"
+    set_env_value "APP_URL" "${APP_URL}"
+    set_env_value "NEXT_PUBLIC_APP_URL" "${APP_URL}"
+    set_env_value "NEXT_PUBLIC_API_URL" "/api"
+    set_env_value "NEXT_PUBLIC_API_BASE_URL" "/api"
+    set_env_value "API_URL" "${APP_URL}/api"
+    set_env_value "SESSION_DOMAIN" "${APP_DOMAIN}"
+    set_env_value "SANCTUM_STATEFUL_DOMAINS" "${APP_DOMAIN}"
+    set_env_value "MAIL_FROM_ADDRESS" "${MAIL_FROM_ADDRESS}"
+
+    echo "Updated .env domain settings for ${APP_URL}."
+  fi
 fi
 
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" build

@@ -30,7 +30,34 @@ curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/de
 
 The installer clones Obscribe into `/opt/obscribe`, creates `.env` from `.env.example`, generates database and object-storage secrets, builds the containers, and starts the stack.
 
-Before public launch, edit `/opt/obscribe/.env`:
+For an interactive first install, run:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
+```
+
+The installer will ask for:
+
+- public domain, for example `notes.example.com`
+- SSL certificate notice email, for example `admin@example.com`
+
+For a non-interactive install:
+
+```bash
+OBSCRIBE_DOMAIN=notes.example.com OBSCRIBE_ACME_EMAIL=admin@example.com \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
+```
+
+To update domain settings after an earlier install:
+
+```bash
+OBSCRIBE_DOMAIN=notes.example.com OBSCRIBE_ACME_EMAIL=admin@example.com \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
+```
+
+The SSL email is only used by Caddy/Let's Encrypt for certificate notices. App email is separate and currently defaults to log-only delivery with `MAIL_FROM_ADDRESS=no-reply@your-domain`.
+
+Before public launch, confirm `/opt/obscribe/.env`:
 
 ```env
 APP_DOMAIN=notes.example.com
@@ -52,6 +79,12 @@ Optional installer settings:
 OBSCRIBE_HOME=/srv/obscribe OBSCRIBE_REPO_REF=main \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
 ```
+
+SSL requirements:
+
+- DNS `A` record points the app domain to the server
+- ports `80` and `443` are open
+- no other reverse proxy is already bound to those ports
 
 ## Production Services
 
