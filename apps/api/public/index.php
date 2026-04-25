@@ -501,7 +501,10 @@ try {
 
     if ($method === 'POST' && $path === '/mail/test') {
         $mail = send_test_email($user);
-        json_response(['mail' => $mail], $mail['sent'] ? 200 : 422);
+        json_response([
+            'mail' => $mail,
+            'message' => $mail['message'] ?? 'SMTP test failed.',
+        ], $mail['sent'] ? 200 : 422);
     }
 
     if ($method === 'GET' && $path === '/notebooks') {
