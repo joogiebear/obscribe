@@ -575,6 +575,37 @@ try {
         json_response($stmt->fetch(), 201);
     }
 
+    if ($method === 'PUT' && preg_match('#^/notebooks/(\d+)$#', $path, $matches)) {
+        notebook_for_workspace((int) $matches[1], $workspaceId);
+        $data = input();
+        require_fields($data, ['name']);
+
+        $stmt = db()->prepare(
+            'UPDATE notebooks
+             SET name = :name, updated_at = now()
+             WHERE id = :id AND workspace_id = :workspace_id
+             RETURNING id, workspace_id, name',
+        );
+        $stmt->execute([
+            'id' => (int) $matches[1],
+            'workspace_id' => $workspaceId,
+            'name' => trim((string) $data['name']),
+        ]);
+
+        json_response($stmt->fetch());
+    }
+
+    if ($method === 'DELETE' && preg_match('#^/notebooks/(\d+)$#', $path, $matches)) {
+        notebook_for_workspace((int) $matches[1], $workspaceId);
+        $stmt = db()->prepare('DELETE FROM notebooks WHERE id = :id AND workspace_id = :workspace_id');
+        $stmt->execute([
+            'id' => (int) $matches[1],
+            'workspace_id' => $workspaceId,
+        ]);
+
+        json_response(['deleted' => true]);
+    }
+
     if ($method === 'GET' && preg_match('#^/notebooks/(\d+)/notes$#', $path, $matches)) {
         $notebook = notebook_for_workspace((int) $matches[1], $workspaceId);
         $stmt = db()->prepare(
@@ -619,6 +650,14 @@ try {
         ]);
 
         json_response($stmt->fetch());
+    }
+
+    if ($method === 'DELETE' && preg_match('#^/notes/(\d+)$#', $path, $matches)) {
+        note_for_workspace((int) $matches[1], $workspaceId);
+        $stmt = db()->prepare('DELETE FROM notes WHERE id = :id');
+        $stmt->execute(['id' => (int) $matches[1]]);
+
+        json_response(['deleted' => true]);
     }
 
     json_response(['message' => 'Route not found.'], 404);

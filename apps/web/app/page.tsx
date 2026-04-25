@@ -277,6 +277,21 @@ export default function Home() {
     }
   }
 
+  async function deleteActiveNote() {
+    if (!activeNote) return;
+    if (!window.confirm("Delete this note?")) return;
+
+    try {
+      await api<{ deleted: boolean }>(`/notes/${activeNote.id}`, { method: "DELETE" });
+      const remaining = notes.filter((note) => note.id !== activeNote.id);
+      setNotes(remaining);
+      setActiveNote(remaining[0] ?? null);
+      setStatus("Note deleted");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete note");
+    }
+  }
+
   async function sendTestEmail() {
     try {
       setStatus("Sending test email...");
@@ -522,9 +537,14 @@ export default function Home() {
                     {noteParts.title.trim() || "Untitled"}
                   </h2>
                 </div>
-                <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button">
-                  Save now
-                </button>
+                <div className="editorActions">
+                  <button onClick={deleteActiveNote} className="dangerButton" type="button">
+                    Delete
+                  </button>
+                  <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button">
+                    Save now
+                  </button>
+                </div>
               </div>
               <input
                 className="titleInput"

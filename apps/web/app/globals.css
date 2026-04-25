@@ -310,6 +310,21 @@ textarea:focus-visible {
   gap: 12px;
 }
 
+.editorActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dangerButton {
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #fff1f1;
+  color: #9f1239;
+  font-weight: 900;
+}
+
 .panelHeader {
   margin-bottom: 15px;
 }
