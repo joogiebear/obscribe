@@ -104,27 +104,49 @@ type MarkdownBlock =
   | { type: "code"; text: string }
   | { type: "divider" }
   | { type: "paragraph"; text: string };
-type BlockCommandId =
+type NoteSectionTemplateKey =
+  | "meeting-notes"
+  | "daily-plan"
+  | "decision-record"
+  | "project-status"
+  | "product-spec"
+  | "customer-interview"
+  | "weekly-review"
+  | "research-source"
+  | "bug-report"
+  | "content-brief"
+  | "client-call"
+  | "retrospective";
+type BaseBlockCommandId =
   | "heading"
   | "check"
   | "bullet"
   | "quote"
   | "code"
-  | "divider"
-  | "meeting"
-  | "decision"
-  | "daily-plan";
+  | "divider";
+type BlockCommandId = BaseBlockCommandId | `section:${NoteSectionTemplateKey}`;
 type BlockCommand = {
   id: BlockCommandId;
   label: string;
   description: string;
   icon: LucideIcon;
+  kind: "block" | "section";
+  searchText?: string;
+};
+type NoteSectionTemplate = {
+  key: NoteSectionTemplateKey;
+  name: string;
+  summary: string;
+  icon: LucideIcon;
+  aliases: string[];
+  content: string;
 };
 
 const API =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000/api";
+const CURSOR_TOKEN = "{{cursor}}";
 
 const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   {
@@ -264,62 +286,318 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   },
 ];
 
-const BLOCK_COMMANDS: BlockCommand[] = [
+const NOTE_SECTION_TEMPLATES: NoteSectionTemplate[] = [
+  {
+    key: "meeting-notes",
+    name: "Meeting Notes",
+    summary: "Agenda, decisions, action items",
+    icon: ClipboardList,
+    aliases: ["standup", "sync", "1:1", "one on one"],
+    content: [
+      "## Meeting Notes",
+      "Date: " + CURSOR_TOKEN,
+      "Attendees: ",
+      "",
+      "### Agenda",
+      "- ",
+      "",
+      "### Decisions",
+      "- ",
+      "",
+      "### Action Items",
+      "- [ ] ",
+    ].join("\n"),
+  },
+  {
+    key: "daily-plan",
+    name: "Daily Plan",
+    summary: "Priorities, notes, wins",
+    icon: Clock3,
+    aliases: ["today", "planning", "tasks", "focus"],
+    content: [
+      "## Daily Plan",
+      "Date: " + CURSOR_TOKEN,
+      "",
+      "### Top Priorities",
+      "- [ ] ",
+      "- [ ] ",
+      "- [ ] ",
+      "",
+      "### Notes",
+      "",
+      "### Wins",
+      "- ",
+    ].join("\n"),
+  },
+  {
+    key: "decision-record",
+    name: "Decision Record",
+    summary: "Context, choice, next steps",
+    icon: CheckCircle2,
+    aliases: ["decision", "adr", "choice", "tradeoff"],
+    content: [
+      "## Decision",
+      "Context: " + CURSOR_TOKEN,
+      "",
+      "### Decision",
+      "",
+      "### Options Considered",
+      "- ",
+      "",
+      "### Next Steps",
+      "- [ ] ",
+    ].join("\n"),
+  },
+  {
+    key: "project-status",
+    name: "Project Status",
+    summary: "Progress, blockers, next steps",
+    icon: Briefcase,
+    aliases: ["project update", "milestones", "stakeholder update"],
+    content: [
+      "## Project Status",
+      "Status: " + CURSOR_TOKEN,
+      "",
+      "### Progress",
+      "- ",
+      "",
+      "### Blockers",
+      "- ",
+      "",
+      "### Next Steps",
+      "- [ ] ",
+    ].join("\n"),
+  },
+  {
+    key: "product-spec",
+    name: "Product Spec",
+    summary: "Problem, scope, requirements",
+    icon: FileText,
+    aliases: ["prd", "feature", "requirements", "product brief"],
+    content: [
+      "## Product Spec",
+      "Problem: " + CURSOR_TOKEN,
+      "",
+      "### Users",
+      "- ",
+      "",
+      "### Requirements",
+      "- ",
+      "",
+      "### Out of Scope",
+      "- ",
+      "",
+      "### Open Questions",
+      "- ",
+    ].join("\n"),
+  },
+  {
+    key: "customer-interview",
+    name: "Customer Interview",
+    summary: "Questions, insights, follow-up",
+    icon: Users,
+    aliases: ["user interview", "customer research", "discovery"],
+    content: [
+      "## Customer Interview",
+      "Customer: " + CURSOR_TOKEN,
+      "Date: ",
+      "",
+      "### Goals",
+      "- ",
+      "",
+      "### Questions",
+      "- ",
+      "",
+      "### Insights",
+      "- ",
+      "",
+      "### Follow-up",
+      "- [ ] ",
+    ].join("\n"),
+  },
+  {
+    key: "weekly-review",
+    name: "Weekly Review",
+    summary: "Wins, lessons, next week",
+    icon: Clock3,
+    aliases: ["review", "planning", "weekly planning"],
+    content: [
+      "## Weekly Review",
+      "Week of: " + CURSOR_TOKEN,
+      "",
+      "### Wins",
+      "- ",
+      "",
+      "### Lessons",
+      "- ",
+      "",
+      "### Carry Forward",
+      "- [ ] ",
+      "",
+      "### Next Week",
+      "- [ ] ",
+    ].join("\n"),
+  },
+  {
+    key: "research-source",
+    name: "Research Source",
+    summary: "Source notes and takeaways",
+    icon: FileSearch,
+    aliases: ["source", "citation", "reading notes", "research"],
+    content: [
+      "## Research Source",
+      "Source: " + CURSOR_TOKEN,
+      "Link: ",
+      "",
+      "### Key Points",
+      "- ",
+      "",
+      "### Evidence",
+      "- ",
+      "",
+      "### Takeaways",
+      "- ",
+    ].join("\n"),
+  },
+  {
+    key: "bug-report",
+    name: "Bug Report",
+    summary: "Steps, expected, actual",
+    icon: Code2,
+    aliases: ["issue", "defect", "qa", "debug"],
+    content: [
+      "## Bug Report",
+      "Summary: " + CURSOR_TOKEN,
+      "",
+      "### Steps to Reproduce",
+      "1. ",
+      "",
+      "### Expected",
+      "",
+      "### Actual",
+      "",
+      "### Notes",
+      "- ",
+    ].join("\n"),
+  },
+  {
+    key: "content-brief",
+    name: "Content Brief",
+    summary: "Audience, angle, outline",
+    icon: PenLine,
+    aliases: ["article", "post", "newsletter", "draft"],
+    content: [
+      "## Content Brief",
+      "Topic: " + CURSOR_TOKEN,
+      "Audience: ",
+      "",
+      "### Angle",
+      "",
+      "### Outline",
+      "- ",
+      "",
+      "### Distribution",
+      "- [ ] ",
+    ].join("\n"),
+  },
+  {
+    key: "client-call",
+    name: "Client Call",
+    summary: "Context, asks, commitments",
+    icon: Users,
+    aliases: ["client", "sales call", "account"],
+    content: [
+      "## Client Call",
+      "Client: " + CURSOR_TOKEN,
+      "Date: ",
+      "",
+      "### Context",
+      "- ",
+      "",
+      "### Requests",
+      "- ",
+      "",
+      "### Commitments",
+      "- [ ] ",
+    ].join("\n"),
+  },
+  {
+    key: "retrospective",
+    name: "Retrospective",
+    summary: "What worked, what did not, actions",
+    icon: RefreshCcw,
+    aliases: ["retro", "postmortem", "lessons learned"],
+    content: [
+      "## Retrospective",
+      "Scope: " + CURSOR_TOKEN,
+      "",
+      "### What Worked",
+      "- ",
+      "",
+      "### What Did Not",
+      "- ",
+      "",
+      "### Actions",
+      "- [ ] ",
+    ].join("\n"),
+  },
+];
+
+const BASIC_BLOCK_COMMANDS: BlockCommand[] = [
   {
     id: "heading",
     label: "Heading",
     description: "Section title",
     icon: Heading1,
+    kind: "block",
   },
   {
     id: "check",
     label: "Checklist",
     description: "Track open items",
     icon: ListChecks,
+    kind: "block",
   },
   {
     id: "bullet",
     label: "Bullet list",
     description: "Capture grouped points",
     icon: List,
+    kind: "block",
   },
   {
     id: "quote",
     label: "Quote",
     description: "Pull out context",
     icon: Quote,
+    kind: "block",
   },
   {
     id: "code",
     label: "Code block",
     description: "Commands or snippets",
     icon: Code2,
+    kind: "block",
   },
   {
     id: "divider",
     label: "Divider",
     description: "Separate sections",
     icon: Minus,
-  },
-  {
-    id: "meeting",
-    label: "Meeting block",
-    description: "Agenda, decisions, action items",
-    icon: ClipboardList,
-  },
-  {
-    id: "decision",
-    label: "Decision block",
-    description: "Context, choice, next steps",
-    icon: CheckCircle2,
-  },
-  {
-    id: "daily-plan",
-    label: "Daily plan",
-    description: "Priorities, notes, wins",
-    icon: Clock3,
+    kind: "block",
   },
 ];
+
+const SECTION_BLOCK_COMMANDS: BlockCommand[] = NOTE_SECTION_TEMPLATES.map((template) => ({
+  id: `section:${template.key}`,
+  label: template.name,
+  description: template.summary,
+  icon: template.icon,
+  kind: "section",
+  searchText: template.aliases.join(" "),
+}));
+
+const BLOCK_COMMANDS: BlockCommand[] = [...BASIC_BLOCK_COMMANDS, ...SECTION_BLOCK_COMMANDS];
 
 function splitNoteContent(value: string) {
   const [firstLine = "", ...rest] = value.split("\n");
@@ -1095,7 +1373,7 @@ export default function Home() {
   const visibleBlockCommands = useMemo(() => {
     return BLOCK_COMMANDS.filter((command) => {
       if (!blockCommandQuery) return true;
-      return `${command.label} ${command.description}`.toLowerCase().includes(blockCommandQuery);
+      return `${command.label} ${command.description} ${command.searchText ?? ""} ${command.kind}`.toLowerCase().includes(blockCommandQuery);
     });
   }, [blockCommandQuery]);
   const commandMenuOpen = blockMenuOpen || Boolean(slashMenu);
@@ -1178,7 +1456,23 @@ export default function Home() {
     replaceEditorRange(start, end, replacement, selectionStart, selectionEnd);
   }
 
+  function noteSectionContent(commandId: BlockCommandId) {
+    if (!commandId.startsWith("section:")) return null;
+
+    const templateKey = commandId.replace("section:", "") as NoteSectionTemplateKey;
+    const template = NOTE_SECTION_TEMPLATES.find((item) => item.key === templateKey);
+    if (!template) return null;
+
+    const tokenIndex = template.content.indexOf(CURSOR_TOKEN);
+    const text = template.content.replace(CURSOR_TOKEN, "");
+    const cursor = tokenIndex >= 0 ? tokenIndex : text.length;
+    return { text, start: cursor, end: cursor };
+  }
+
   function blockCommandContent(commandId: BlockCommandId, selected: string) {
+    const sectionContent = noteSectionContent(commandId);
+    if (sectionContent) return sectionContent;
+
     if (commandId === "heading") {
       const text = selected || "Heading";
       return { text: `## ${text}`, start: 3, end: 3 + text.length };
@@ -1208,56 +1502,8 @@ export default function Home() {
       return { text: "---", start: 3, end: 3 };
     }
 
-    if (commandId === "meeting") {
-      const text = [
-        "## Meeting Notes",
-        "Date: ",
-        "Attendees: ",
-        "",
-        "### Agenda",
-        "- ",
-        "",
-        "### Decisions",
-        "- ",
-        "",
-        "### Action Items",
-        "- [ ] ",
-      ].join("\n");
-      const start = text.indexOf("Date: ") + "Date: ".length;
-      return { text, start, end: start };
-    }
-
-    if (commandId === "decision") {
-      const text = [
-        "## Decision",
-        "Context",
-        "",
-        "Decision",
-        "",
-        "Options considered",
-        "- ",
-        "",
-        "Next steps",
-        "- [ ] ",
-      ].join("\n");
-      const start = text.indexOf("Context") + "Context".length;
-      return { text, start, end: start };
-    }
-
-    const text = [
-      "## Daily Plan",
-      "Top priorities",
-      "- [ ] ",
-      "- [ ] ",
-      "- [ ] ",
-      "",
-      "Notes",
-      "",
-      "Wins",
-      "- ",
-    ].join("\n");
-    const start = text.indexOf("- [ ] ") + "- [ ] ".length;
-    return { text, start, end: start };
+    const text = selected || "Text";
+    return { text, start: 0, end: text.length };
   }
 
   function insertBlockCommand(commandId: BlockCommandId) {
@@ -2079,8 +2325,8 @@ export default function Home() {
                         window.setTimeout(() => editorRef.current?.focus(), 0);
                       }}
                       type="button"
-                      aria-label="Insert block"
-                      title="Insert block"
+                      aria-label="Insert block or section"
+                      title="Insert block or section"
                     >
                       <Plus size={16} strokeWidth={2.3} />
                     </button>

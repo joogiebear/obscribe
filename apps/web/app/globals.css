@@ -1512,6 +1512,8 @@ small {
   gap: 6px;
   margin: -4px 0 16px;
   padding: 8px;
+  max-height: min(360px, 42svh);
+  overflow: auto;
   border: 1px solid var(--line-soft);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.94);
