@@ -1,24 +1,24 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\NotebookController;
+use App\Http\Controllers\NoteController;
 
 Route::get('/health', function () {
-    return response()->json(['status' => 'ok']);
+    return response()->json(['status' => 'ok', 'app' => 'obscribe-api']);
 });
 
-// Auth (Laravel will own this)
-Route::prefix('auth')->group(function () {
-    Route::post('/login', 'AuthController@login');
-    Route::post('/register', 'AuthController@register');
-    Route::post('/logout', 'AuthController@logout');
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
 
-    // OAuth placeholders
-    Route::get('/redirect/{provider}', 'OAuthController@redirect');
-    Route::get('/callback/{provider}', 'OAuthController@callback');
-});
-
-// Notebooks
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/notebooks', 'NotebookController@index');
-    Route::post('/notebooks', 'NotebookController@store');
+    Route::get('/me', [AuthController::class, 'me']);
+
+    Route::get('/notebooks', [NotebookController::class, 'index']);
+    Route::post('/notebooks', [NotebookController::class, 'store']);
+
+    Route::get('/notebooks/{id}/notes', [NoteController::class, 'index']);
+    Route::post('/notebooks/{id}/notes', [NoteController::class, 'store']);
+    Route::put('/notes/{id}', [NoteController::class, 'update']);
 });
