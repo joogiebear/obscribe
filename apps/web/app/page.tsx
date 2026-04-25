@@ -4,12 +4,15 @@ import {
   ArrowLeft,
   BookOpen,
   Bold,
+  Briefcase,
   Check,
   CheckCircle2,
+  ClipboardList,
   Clock3,
   Code2,
   Download,
   Edit3,
+  FileSearch,
   FileText,
   Heading1,
   Italic,
@@ -19,6 +22,7 @@ import {
   ListChecks,
   LogOut,
   Mail,
+  PenLine,
   Plus,
   Quote,
   RefreshCcw,
@@ -28,7 +32,9 @@ import {
   ShieldCheck,
   Trash2,
   Upload,
+  Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -41,6 +47,18 @@ type Note = {
   notebook_id: number;
   content: string | null;
   updated_at?: string;
+};
+type NotebookTemplateKey =
+  | "meeting-notes"
+  | "project-hub"
+  | "client-workspace"
+  | "research-notebook"
+  | "content-planner";
+type NotebookTemplate = {
+  key: NotebookTemplateKey;
+  name: string;
+  summary: string;
+  icon: LucideIcon;
 };
 type MailStatus = { sent: boolean; driver: string; message?: string };
 type SearchNote = Note & { notebook_name: string };
@@ -73,6 +91,39 @@ const API =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8000/api";
+
+const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
+  {
+    key: "meeting-notes",
+    name: "Meeting Notes",
+    summary: "Agenda, decisions, action items",
+    icon: ClipboardList,
+  },
+  {
+    key: "project-hub",
+    name: "Project Hub",
+    summary: "Overview, tasks, milestones, risks",
+    icon: Briefcase,
+  },
+  {
+    key: "client-workspace",
+    name: "Client Workspace",
+    summary: "Profile, calls, requirements",
+    icon: Users,
+  },
+  {
+    key: "research-notebook",
+    name: "Research Notebook",
+    summary: "Sources, findings, summary",
+    icon: FileSearch,
+  },
+  {
+    key: "content-planner",
+    name: "Content Planner",
+    summary: "Ideas, drafts, publishing checklist",
+    icon: PenLine,
+  },
+];
 
 function splitNoteContent(value: string) {
   const [firstLine = "", ...rest] = value.split("\n");
@@ -175,6 +226,7 @@ export default function Home() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [notebooksLoaded, setNotebooksLoaded] = useState(false);
   const [notebookName, setNotebookName] = useState("");
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState<NotebookTemplateKey | "">("");
   const [activeNotebook, setActiveNotebook] = useState<Notebook | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
@@ -504,19 +556,25 @@ export default function Home() {
     }
   }
 
-  async function createNotebookNamed(value: string) {
-    const name = value.trim();
+  async function createNotebookNamed(value: string, templateKey: NotebookTemplateKey | "" = "") {
+    const template = NOTEBOOK_TEMPLATES.find((item) => item.key === templateKey);
+    const name = value.trim() || template?.name || "";
     if (!name) return;
 
     try {
       const notebook = await api<Notebook>("/notebooks", {
         method: "POST",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({
+          name,
+          ...(templateKey ? { template_key: templateKey } : {}),
+        }),
       });
       setNotebookName("");
+      setSelectedTemplateKey("");
       setActiveNotebook(notebook);
       setMobilePane("notes");
       await loadNotebooks();
+      setStatus(templateKey ? "Notebook template created" : "Notebook created");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create notebook");
       setNotebooksLoaded(true);
@@ -525,7 +583,7 @@ export default function Home() {
 
   async function createNotebook(e: FormEvent) {
     e.preventDefault();
-    await createNotebookNamed(notebookName);
+    await createNotebookNamed(notebookName, selectedTemplateKey);
   }
 
   async function createNote() {
@@ -766,6 +824,7 @@ export default function Home() {
   });
   const noteParts = splitNoteContent(content);
   const previewBlocks = useMemo(() => markdownBlocks(noteParts.body), [noteParts.body]);
+  const selectedTemplate = NOTEBOOK_TEMPLATES.find((template) => template.key === selectedTemplateKey);
   const isDirty = activeNote ? (activeNote.content || "") !== content : false;
   const bodyWordCount = noteParts.body.trim() ? noteParts.body.trim().split(/\s+/).length : 0;
   const noteCountLabel = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
@@ -1305,12 +1364,46 @@ export default function Home() {
                   className="input"
                   value={notebookName}
                   onChange={(e) => setNotebookName(e.target.value)}
-                  placeholder="Notebook name"
+                  placeholder={selectedTemplate ? selectedTemplate.name : "Notebook name"}
                 />
-                <button className="addButton" aria-label="Create notebook" disabled={!notebookName.trim()}>
+                <button
+                  className="addButton"
+                  aria-label="Create notebook"
+                  disabled={!notebookName.trim() && !selectedTemplateKey}
+                >
                   <Plus size={19} strokeWidth={2.4} />
                 </button>
               </form>
+              <div className="templatePicker" aria-label="Notebook templates">
+                <div className="templatePickerHeader">
+                  <span>Starter templates</span>
+                  {selectedTemplateKey && (
+                    <button onClick={() => setSelectedTemplateKey("")} type="button">
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="templateGrid">
+                  {NOTEBOOK_TEMPLATES.map((template) => {
+                    const TemplateIcon = template.icon;
+                    return (
+                      <button
+                        key={template.key}
+                        className={selectedTemplateKey === template.key ? "templateOptionActive" : "templateOption"}
+                        onClick={() => {
+                          setSelectedTemplateKey((current) => (current === template.key ? "" : template.key));
+                          if (!notebookName.trim()) setNotebookName(template.name);
+                        }}
+                        type="button"
+                      >
+                        <TemplateIcon size={15} strokeWidth={2.2} />
+                        <span>{template.name}</span>
+                        <small>{template.summary}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="searchWrap">
                 <Search size={15} strokeWidth={2} />
                 <input
@@ -1406,7 +1499,7 @@ export default function Home() {
                 ))}
                 {!notebooks.length && (
                   <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
-                    Create your first notebook
+                    Create a blank notebook
                   </button>
                 )}
                 {!!notebooks.length && !filteredNotebooks.length && (

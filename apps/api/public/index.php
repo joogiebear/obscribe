@@ -648,6 +648,103 @@ function import_workspace_payload(array $data, int $workspaceId): array
     return ['notebooks' => $importedNotebooks, 'notes' => $importedNotes];
 }
 
+function notebook_templates(): array
+{
+    return [
+        'meeting-notes' => [
+            'name' => 'Meeting Notes',
+            'notes' => [
+                "Meeting Notes\n\n## Agenda\n- \n\n## Decisions\n- \n\n## Action Items\n- [ ] Owner - task - due date\n\n## Follow-ups\n- ",
+                "1:1 Notes\n\n## Wins\n- \n\n## Blockers\n- \n\n## Next Steps\n- [ ] ",
+                "Decision Log\n\n## Decision\n\n## Context\n\n## Owner\n\n## Date\n",
+            ],
+        ],
+        'project-hub' => [
+            'name' => 'Project Hub',
+            'notes' => [
+                "Project Overview\n\n## Goal\n\n## Scope\n\n## Success Criteria\n\n## Key Links\n- ",
+                "Tasks\n\n- [ ] Define requirements\n- [ ] Assign owners\n- [ ] Set milestone dates\n- [ ] Review risks",
+                "Milestones\n\n## Now\n\n## Next\n\n## Later\n",
+                "Risks and Decisions\n\n## Risks\n- \n\n## Decisions\n- ",
+            ],
+        ],
+        'client-workspace' => [
+            'name' => 'Client Workspace',
+            'notes' => [
+                "Client Profile\n\n## Contacts\n- \n\n## Goals\n\n## Preferences\n\n## Important Links\n- ",
+                "Call Notes\n\n## Date\n\n## Topics\n- \n\n## Commitments\n- [ ] ",
+                "Requirements\n\n## Must Have\n- \n\n## Nice to Have\n- \n\n## Questions\n- ",
+            ],
+        ],
+        'research-notebook' => [
+            'name' => 'Research Notebook',
+            'notes' => [
+                "Research Brief\n\n## Question\n\n## Hypothesis\n\n## What Good Looks Like\n",
+                "Sources\n\n- [ ] Source - note\n- [ ] Source - note\n",
+                "Findings\n\n## Themes\n- \n\n## Contradictions\n- \n\n## Summary\n",
+            ],
+        ],
+        'content-planner' => [
+            'name' => 'Content Planner',
+            'notes' => [
+                "Content Ideas\n\n## Backlog\n- \n\n## In Progress\n- \n\n## Published\n- ",
+                "Draft Template\n\n## Hook\n\n## Main Points\n- \n\n## CTA\n",
+                "Publishing Checklist\n\n- [ ] Draft complete\n- [ ] Review complete\n- [ ] Assets ready\n- [ ] Scheduled\n",
+            ],
+        ],
+    ];
+}
+
+function create_notebook_with_template(int $workspaceId, string $name, ?string $templateKey): array
+{
+    $template = null;
+    if ($templateKey !== null && $templateKey !== '') {
+        $templates = notebook_templates();
+        if (!isset($templates[$templateKey])) {
+            json_response(['message' => 'Unknown notebook template.'], 422);
+        }
+        $template = $templates[$templateKey];
+    }
+
+    $pdo = db();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare(
+            'INSERT INTO notebooks (workspace_id, name)
+             VALUES (:workspace_id, :name)
+             RETURNING id, workspace_id, name',
+        );
+        $stmt->execute([
+            'workspace_id' => $workspaceId,
+            'name' => $name,
+        ]);
+        $notebook = $stmt->fetch();
+
+        if ($template) {
+            $noteStmt = $pdo->prepare(
+                'INSERT INTO notes (notebook_id, content)
+                 VALUES (:notebook_id, :content)',
+            );
+
+            foreach ($template['notes'] as $content) {
+                $noteStmt->execute([
+                    'notebook_id' => $notebook['id'],
+                    'content' => $content,
+                ]);
+            }
+        }
+
+        $pdo->commit();
+        return $notebook;
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+}
+
 try {
     migrate();
 
@@ -980,17 +1077,9 @@ try {
         $data = input();
         require_fields($data, ['name']);
 
-        $stmt = db()->prepare(
-            'INSERT INTO notebooks (workspace_id, name)
-             VALUES (:workspace_id, :name)
-             RETURNING id, workspace_id, name',
-        );
-        $stmt->execute([
-            'workspace_id' => $workspaceId,
-            'name' => trim((string) $data['name']),
-        ]);
-
-        json_response($stmt->fetch(), 201);
+        $templateKey = isset($data['template_key']) ? trim((string) $data['template_key']) : null;
+        $notebook = create_notebook_with_template($workspaceId, trim((string) $data['name']), $templateKey);
+        json_response($notebook, 201);
     }
 
     if ($method === 'PUT' && preg_match('#^/notebooks/(\d+)$#', $path, $matches)) {
