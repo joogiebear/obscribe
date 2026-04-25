@@ -708,12 +708,21 @@ export default function Home() {
             </>
           ) : (
             <div className="emptyState">
-              <div className="bigIcon">O</div>
-              <h2>Select or create a note</h2>
-              <p>Your editor will appear here.</p>
-              <button className="primary emptyStateButton" onClick={createNote} disabled={!activeNotebook} type="button">
-                New note
-              </button>
+              <div className="emptyPrompt">
+                <p className="kicker">{activeNotebook?.name ?? "Notebook"}</p>
+                <h2>Start a note</h2>
+                <p>Capture a thought, meeting, project plan, or working draft.</p>
+                <button className="primary emptyStateButton" onClick={createNote} disabled={!activeNotebook} type="button">
+                  <Plus size={16} strokeWidth={2.4} />
+                  New note
+                </button>
+              </div>
+              <div className="emptyPreview" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
             </div>
           )}
         </section>

@@ -10,7 +10,8 @@
   --line: #d8ddd6;
   --line-soft: #ebeee9;
   --brand: #116a5f;
-  --brand-strong: #122b27;
+  --brand-strong: #112b26;
+  --brand-rail: #102f29;
   --brand-soft: #e6f1ee;
   --accent: #a95f38;
   --danger: #9f1239;
@@ -66,8 +67,8 @@ textarea:focus-visible {
 
 .page {
   min-height: 100svh;
-  padding: 14px;
-  background: var(--wash);
+  padding: 0;
+  background: var(--paper-strong);
 }
 
 .loginPage {
@@ -365,20 +366,15 @@ textarea:focus-visible {
   margin: 0 auto 10px;
 }
 
-.topbar,
-.settingsBar,
-.mobileSwitcher,
-.shell {
-  max-width: 1580px;
-  margin-inline: auto;
-}
-
 .topbar {
-  height: 52px;
+  height: 58px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 38px 38px;
   align-items: center;
   gap: 9px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(251, 250, 246, 0.94);
 }
 
 .iconButton {
@@ -422,15 +418,14 @@ textarea:focus-visible {
 }
 
 .settingsBar {
-  margin-bottom: 10px;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.8);
-  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #fbfaf6;
+  padding: 14px 22px;
 }
 
 .settingsTitle {
@@ -452,13 +447,13 @@ textarea:focus-visible {
 }
 
 .shell {
-  height: calc(100svh - 66px);
-  min-height: 660px;
+  height: calc(100svh - 58px);
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(220px, 252px) minmax(284px, 336px) minmax(520px, 1fr);
+  grid-template-columns: 254px 336px minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
   background: var(--paper-strong);
 }
 
@@ -469,9 +464,11 @@ textarea:focus-visible {
 }
 
 .rail {
-  padding: 16px;
+  padding: 18px 16px;
   color: #eaf0ec;
-  background: var(--brand-strong);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 24%),
+    var(--brand-rail);
 }
 
 .rail .kicker,
@@ -495,9 +492,10 @@ textarea:focus-visible {
 }
 
 .notesRail {
-  padding: 16px;
+  padding: 18px 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
   border-right: 1px solid var(--line-soft);
-  background: #f8f8f4;
+  background: #f7f7f2;
 }
 
 .editorPanel {
@@ -505,7 +503,9 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--paper-strong);
+  background:
+    linear-gradient(90deg, rgba(18, 43, 39, 0.025), transparent 18%),
+    var(--paper-strong);
 }
 
 .panelHeader,
@@ -517,7 +517,7 @@ textarea:focus-visible {
 }
 
 .panelHeader {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .panelTitle {
@@ -541,7 +541,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 38px;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .addButton {
@@ -570,7 +570,7 @@ textarea:focus-visible {
 
 .list {
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 
 .item,
@@ -590,7 +590,7 @@ textarea:focus-visible {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 10px;
+  padding: 10px 10px;
   color: rgba(234, 240, 236, 0.82);
   font-weight: 700;
 }
@@ -601,7 +601,7 @@ textarea:focus-visible {
 
 .activeItem {
   border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.11);
   color: #fff;
 }
 
@@ -610,7 +610,7 @@ textarea:focus-visible {
   position: relative;
   display: grid;
   gap: 4px;
-  padding: 10px 10px 10px 13px;
+  padding: 11px 11px 11px 14px;
   color: var(--ink-soft);
 }
 
@@ -658,7 +658,7 @@ small {
 
 .editorTop {
   flex: 0 0 auto;
-  padding: 16px 28px;
+  padding: 16px 32px;
   border-bottom: 1px solid var(--line-soft);
   background: rgba(251, 250, 246, 0.86);
 }
@@ -767,33 +767,70 @@ small {
 .emptyState {
   height: 100%;
   display: grid;
-  place-content: center;
-  text-align: center;
+  grid-template-columns: minmax(320px, 520px) minmax(240px, 420px);
+  align-items: center;
+  justify-content: center;
+  gap: clamp(36px, 7vw, 96px);
   color: var(--muted);
-  padding: 30px;
+  padding: 56px;
 }
 
-.emptyState h2 {
-  margin-bottom: 6px;
+.emptyPrompt {
+  max-width: 460px;
+}
+
+.emptyPrompt h2 {
+  margin: 10px 0 10px;
+  color: var(--ink);
+  font-size: 46px;
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.emptyPrompt p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.65;
 }
 
 .emptyStateButton {
-  margin-top: 12px;
-  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 24px;
 }
 
-.bigIcon {
-  width: 64px;
-  height: 64px;
-  border-radius: 8px;
-  background: var(--wash);
-  color: var(--brand);
+.emptyPreview {
   display: grid;
-  place-items: center;
-  font-size: 30px;
-  font-weight: 800;
-  margin: 0 auto 12px;
-  box-shadow: inset 0 0 0 1px var(--line);
+  gap: 16px;
+  padding: 38px 0;
+  opacity: 0.8;
+}
+
+.emptyPreview span {
+  display: block;
+  height: 14px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #e3e7e0, rgba(227, 231, 224, 0));
+}
+
+.emptyPreview span:first-child {
+  width: 78%;
+  height: 24px;
+  background: linear-gradient(90deg, #ccd6d0, rgba(204, 214, 208, 0));
+}
+
+.emptyPreview span:nth-child(2) {
+  width: 100%;
+}
+
+.emptyPreview span:nth-child(3) {
+  width: 88%;
+}
+
+.emptyPreview span:nth-child(4) {
+  width: 62%;
 }
 
 @media (max-width: 1060px) {
@@ -916,6 +953,23 @@ small {
   .editor {
     font-size: 16px;
     line-height: 1.72;
+  }
+
+  .emptyState {
+    grid-template-columns: 1fr;
+    align-content: center;
+    justify-content: stretch;
+    gap: 28px;
+    padding: 32px 18px;
+  }
+
+  .emptyPrompt h2 {
+    font-size: 36px;
+  }
+
+  .emptyPreview {
+    max-width: 340px;
+    padding: 10px 0;
   }
 }
 
