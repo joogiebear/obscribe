@@ -208,6 +208,36 @@ get_env_value() {
   grep "^${key}=" "${ENV_FILE}" | tail -n 1 | cut -d= -f2- || true
 }
 
+sanitize_env_file() {
+  local tmp_file
+  local backup_file
+  local removed_count=0
+
+  if [ ! -f "${ENV_FILE}" ]; then
+    return
+  fi
+
+  tmp_file="$(mktemp)"
+  backup_file="${ENV_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+
+  while IFS= read -r line || [ -n "${line}" ]; do
+    case "${line}" in
+      ""|\#*|[A-Za-z_]*=*) printf '%s\n' "${line}" >> "${tmp_file}" ;;
+      *)
+        removed_count=$((removed_count + 1))
+        ;;
+    esac
+  done < "${ENV_FILE}"
+
+  if [ "${removed_count}" -gt 0 ]; then
+    cp "${ENV_FILE}" "${backup_file}"
+    cat "${tmp_file}" > "${ENV_FILE}"
+    echo "Removed ${removed_count} invalid line(s) from .env. Backup saved to ${backup_file}."
+  fi
+
+  rm -f "${tmp_file}"
+}
+
 configure_smtp() {
   local should_configure="false"
 
@@ -338,7 +368,9 @@ else
   fi
 fi
 
+sanitize_env_file
 configure_smtp
+sanitize_env_file
 
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" build
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d
