@@ -11,6 +11,7 @@ type Note = {
   content: string | null;
   updated_at?: string;
 };
+type MailStatus = { sent: boolean; driver: string; message?: string };
 
 const API =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -177,7 +178,12 @@ export default function Home() {
 
     try {
       const body = mode === "register" ? { name, email, password } : { email, password };
-      const data = await api<{ token: string; user: User; workspace: Workspace | null }>(
+      const data = await api<{
+        token: string;
+        user: User;
+        workspace: Workspace | null;
+        mail?: MailStatus;
+      }>(
         `/${mode}`,
         { method: "POST", body: JSON.stringify(body) },
       );
@@ -186,7 +192,12 @@ export default function Home() {
       setToken(data.token);
       setUser(data.user);
       setWorkspace(data.workspace);
-      setStatus("Logged in");
+      if (mode === "register" && data.mail) {
+        setStatus(data.mail.sent ? "Account created; email sent" : "Account created; email not sent");
+        if (!data.mail.sent && data.mail.message) setError(data.mail.message);
+      } else {
+        setStatus("Logged in");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     }
@@ -222,6 +233,18 @@ export default function Home() {
       setStatus("Note created");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create note");
+    }
+  }
+
+  async function sendTestEmail() {
+    try {
+      setStatus("Sending test email...");
+      const data = await api<{ mail: MailStatus }>("/mail/test", { method: "POST" });
+      setStatus(data.mail.sent ? "Test email sent" : "Test email failed");
+      if (!data.mail.sent && data.mail.message) setError(data.mail.message);
+    } catch (err) {
+      setStatus("Test email failed");
+      setError(err instanceof Error ? err.message : "Unable to send test email");
     }
   }
 
@@ -306,6 +329,9 @@ export default function Home() {
           </div>
         </div>
         <div className="status">{status}</div>
+        <button onClick={sendTestEmail} className="secondary" type="button">
+          Test email
+        </button>
         <button onClick={logout} className="secondary" type="button">
           Logout
         </button>

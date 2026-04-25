@@ -160,6 +160,26 @@ function send_welcome_email(array $user): array
     }
 }
 
+function send_test_email(array $user): array
+{
+    $mailer = strtolower((string) env_value('MAIL_MAILER', 'log'));
+    $subject = 'Obscribe SMTP test';
+    $body = "Hi {$user['name']},\n\nSMTP is working for this Obscribe install.\n\n" .
+        "App URL: " . env_value('APP_URL', 'http://localhost') . "\n";
+
+    if ($mailer !== 'smtp') {
+        return ['sent' => false, 'driver' => $mailer, 'message' => 'Mail is using the log driver.'];
+    }
+
+    try {
+        smtp_send_message($user['email'], $subject, $body);
+        return ['sent' => true, 'driver' => 'smtp'];
+    } catch (Throwable $exception) {
+        error_log('SMTP test failed: ' . $exception->getMessage());
+        return ['sent' => false, 'driver' => 'smtp', 'message' => $exception->getMessage()];
+    }
+}
+
 function db(): PDO
 {
     static $pdo = null;
@@ -477,6 +497,11 @@ try {
             'user' => public_user($user),
             'workspace' => ['id' => $workspaceId, 'name' => $workspace['name']],
         ]);
+    }
+
+    if ($method === 'POST' && $path === '/mail/test') {
+        $mail = send_test_email($user);
+        json_response(['mail' => $mail], $mail['sent'] ? 200 : 422);
     }
 
     if ($method === 'GET' && $path === '/notebooks') {
