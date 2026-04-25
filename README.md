@@ -125,6 +125,18 @@ SSL requirements:
 - Redis
 - MinIO-compatible object storage placeholder
 
+## Operations
+
+From `/opt/obscribe` on the server:
+
+```bash
+bash scripts/status.sh
+bash scripts/backup.sh
+bash scripts/restore.sh /opt/obscribe/backups/obscribe-backup-YYYYmmddHHMMSS.tar.gz
+```
+
+Backups include a PostgreSQL dump, a copy of `.env`, and a small service inventory. The restore command asks for explicit confirmation before replacing the database.
+
 ## SaaS Direction
 
 Keep the single-server install as the baseline until backups, upgrades, health checks, auth, billing, and tenant scoping are proven. The later hosted service can split this same topology into load-balanced web/API workers, managed PostgreSQL, managed Redis, and external object storage without changing the product contract.

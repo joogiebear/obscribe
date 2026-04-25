@@ -2,7 +2,7 @@ node_modules/
 .next/
 dist/
 build/
+backups/
 .env
 .env.local
 .env.*.local
-
