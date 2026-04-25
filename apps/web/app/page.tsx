@@ -22,6 +22,7 @@ import {
   ListChecks,
   LogOut,
   Mail,
+  Minus,
   Moon,
   PenLine,
   Plus,
@@ -38,7 +39,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type AuthMode = "login" | "register" | "forgot" | "reset";
 type ThemeMode = "light" | "dark";
@@ -101,7 +102,24 @@ type MarkdownBlock =
   | { type: "bullet"; text: string }
   | { type: "quote"; text: string }
   | { type: "code"; text: string }
+  | { type: "divider" }
   | { type: "paragraph"; text: string };
+type BlockCommandId =
+  | "heading"
+  | "check"
+  | "bullet"
+  | "quote"
+  | "code"
+  | "divider"
+  | "meeting"
+  | "decision"
+  | "daily-plan";
+type BlockCommand = {
+  id: BlockCommandId;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+};
 
 const API =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -246,6 +264,63 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   },
 ];
 
+const BLOCK_COMMANDS: BlockCommand[] = [
+  {
+    id: "heading",
+    label: "Heading",
+    description: "Section title",
+    icon: Heading1,
+  },
+  {
+    id: "check",
+    label: "Checklist",
+    description: "Track open items",
+    icon: ListChecks,
+  },
+  {
+    id: "bullet",
+    label: "Bullet list",
+    description: "Capture grouped points",
+    icon: List,
+  },
+  {
+    id: "quote",
+    label: "Quote",
+    description: "Pull out context",
+    icon: Quote,
+  },
+  {
+    id: "code",
+    label: "Code block",
+    description: "Commands or snippets",
+    icon: Code2,
+  },
+  {
+    id: "divider",
+    label: "Divider",
+    description: "Separate sections",
+    icon: Minus,
+  },
+  {
+    id: "meeting",
+    label: "Meeting block",
+    description: "Agenda, decisions, action items",
+    icon: ClipboardList,
+  },
+  {
+    id: "decision",
+    label: "Decision block",
+    description: "Context, choice, next steps",
+    icon: CheckCircle2,
+  },
+  {
+    id: "daily-plan",
+    label: "Daily plan",
+    description: "Priorities, notes, wins",
+    icon: Clock3,
+  },
+];
+
 function splitNoteContent(value: string) {
   const [firstLine = "", ...rest] = value.split("\n");
   return {
@@ -300,6 +375,11 @@ function markdownBlocks(value: string): MarkdownBlock[] {
 
     const trimmed = line.trim();
     if (!trimmed) continue;
+
+    if (/^---+$/.test(trimmed)) {
+      blocks.push({ type: "divider" });
+      continue;
+    }
 
     const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
     if (heading) {
@@ -380,6 +460,9 @@ export default function Home() {
   const [exportStatus, setExportStatus] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [editorMode, setEditorMode] = useState<"write" | "preview">("write");
+  const [blockMenuOpen, setBlockMenuOpen] = useState(false);
+  const [slashMenu, setSlashMenu] = useState<{ start: number; end: number; query: string } | null>(null);
+  const [activeBlockCommandIndex, setActiveBlockCommandIndex] = useState(0);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
@@ -564,6 +647,8 @@ export default function Home() {
     setContent(activeNote?.content || "");
     setLastSavedAt(null);
     setPendingDelete(false);
+    setBlockMenuOpen(false);
+    setSlashMenu(null);
   }, [activeNote?.id, activeNote?.content]);
 
   useEffect(() => {
@@ -611,6 +696,8 @@ export default function Home() {
         setGlobalQuery("");
         setSearchResults(null);
         setTemplateDialogOpen(false);
+        setBlockMenuOpen(false);
+        setSlashMenu(null);
       }
     }
 
@@ -1004,6 +1091,17 @@ export default function Home() {
       return `${template.name} ${template.summary} ${template.details} ${template.includes.join(" ")}`.toLowerCase().includes(query);
     });
   }, [templateQuery]);
+  const blockCommandQuery = slashMenu?.query.trim().toLowerCase() ?? "";
+  const visibleBlockCommands = useMemo(() => {
+    return BLOCK_COMMANDS.filter((command) => {
+      if (!blockCommandQuery) return true;
+      return `${command.label} ${command.description}`.toLowerCase().includes(blockCommandQuery);
+    });
+  }, [blockCommandQuery]);
+  const commandMenuOpen = blockMenuOpen || Boolean(slashMenu);
+  useEffect(() => {
+    setActiveBlockCommandIndex(0);
+  }, [blockCommandQuery, blockMenuOpen]);
   const selectedTemplate =
     filteredTemplates.find((template) => template.key === selectedTemplateId) ?? filteredTemplates[0] ?? null;
   const SelectedTemplateIcon = selectedTemplate?.icon;
@@ -1029,18 +1127,188 @@ export default function Home() {
     setContent(noteParts.title ? `${noteParts.title}\n${value}` : `\n${value}`);
   }
 
-  function insertEditorText(replacement: string, selectionStart: number, selectionEnd = selectionStart) {
-    const textarea = editorRef.current;
+  function closeBlockMenus() {
+    setBlockMenuOpen(false);
+    setSlashMenu(null);
+  }
+
+  function syncSlashMenu(value: string, cursor: number) {
+    const lineStart = value.lastIndexOf("\n", Math.max(0, cursor - 1)) + 1;
+    const beforeCursor = value.slice(lineStart, cursor);
+    const match = /^\/([\w\s-]*)$/.exec(beforeCursor);
+
+    if (match) {
+      setSlashMenu({ start: lineStart, end: cursor, query: match[1] });
+      setBlockMenuOpen(false);
+      return;
+    }
+
+    setSlashMenu(null);
+  }
+
+  function handleEditorChange(value: string, cursor: number) {
+    updateNoteBody(value);
+    syncSlashMenu(value, cursor);
+  }
+
+  function replaceEditorRange(
+    start: number,
+    end: number,
+    replacement: string,
+    selectionStart: number,
+    selectionEnd = selectionStart,
+  ) {
     const body = noteParts.body;
-    const start = textarea?.selectionStart ?? body.length;
-    const end = textarea?.selectionEnd ?? body.length;
     const nextBody = `${body.slice(0, start)}${replacement}${body.slice(end)}`;
 
+    closeBlockMenus();
+    setEditorMode("write");
     updateNoteBody(nextBody);
     window.setTimeout(() => {
       editorRef.current?.focus();
       editorRef.current?.setSelectionRange(start + selectionStart, start + selectionEnd);
     }, 0);
+  }
+
+  function insertEditorText(replacement: string, selectionStart: number, selectionEnd = selectionStart) {
+    const textarea = editorRef.current;
+    const body = noteParts.body;
+    const start = textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? body.length;
+    replaceEditorRange(start, end, replacement, selectionStart, selectionEnd);
+  }
+
+  function blockCommandContent(commandId: BlockCommandId, selected: string) {
+    if (commandId === "heading") {
+      const text = selected || "Heading";
+      return { text: `## ${text}`, start: 3, end: 3 + text.length };
+    }
+
+    if (commandId === "check") {
+      const text = selected || "Task";
+      return { text: `- [ ] ${text}`, start: 6, end: 6 + text.length };
+    }
+
+    if (commandId === "bullet") {
+      const text = selected || "List item";
+      return { text: `- ${text}`, start: 2, end: 2 + text.length };
+    }
+
+    if (commandId === "quote") {
+      const text = selected || "Quote";
+      return { text: `> ${text}`, start: 2, end: 2 + text.length };
+    }
+
+    if (commandId === "code") {
+      const text = selected || "code";
+      return { text: `\`\`\`\n${text}\n\`\`\``, start: 4, end: 4 + text.length };
+    }
+
+    if (commandId === "divider") {
+      return { text: "---", start: 3, end: 3 };
+    }
+
+    if (commandId === "meeting") {
+      const text = [
+        "## Meeting Notes",
+        "Date: ",
+        "Attendees: ",
+        "",
+        "### Agenda",
+        "- ",
+        "",
+        "### Decisions",
+        "- ",
+        "",
+        "### Action Items",
+        "- [ ] ",
+      ].join("\n");
+      const start = text.indexOf("Date: ") + "Date: ".length;
+      return { text, start, end: start };
+    }
+
+    if (commandId === "decision") {
+      const text = [
+        "## Decision",
+        "Context",
+        "",
+        "Decision",
+        "",
+        "Options considered",
+        "- ",
+        "",
+        "Next steps",
+        "- [ ] ",
+      ].join("\n");
+      const start = text.indexOf("Context") + "Context".length;
+      return { text, start, end: start };
+    }
+
+    const text = [
+      "## Daily Plan",
+      "Top priorities",
+      "- [ ] ",
+      "- [ ] ",
+      "- [ ] ",
+      "",
+      "Notes",
+      "",
+      "Wins",
+      "- ",
+    ].join("\n");
+    const start = text.indexOf("- [ ] ") + "- [ ] ".length;
+    return { text, start, end: start };
+  }
+
+  function insertBlockCommand(commandId: BlockCommandId) {
+    const textarea = editorRef.current;
+    const body = noteParts.body;
+    const cursorStart = textarea?.selectionStart ?? body.length;
+    const cursorEnd = textarea?.selectionEnd ?? body.length;
+    const rangeStart = slashMenu?.start ?? cursorStart;
+    const rangeEnd = slashMenu?.end ?? cursorEnd;
+    const selected = slashMenu ? "" : body.slice(cursorStart, cursorEnd);
+    const command = blockCommandContent(commandId, selected);
+    const linePrefix = rangeStart > 0 && body[rangeStart - 1] !== "\n" ? "\n" : "";
+    const lineSuffix = rangeEnd < body.length && body[rangeEnd] !== "\n" ? "\n" : "";
+
+    replaceEditorRange(
+      rangeStart,
+      rangeEnd,
+      `${linePrefix}${command.text}${lineSuffix}`,
+      linePrefix.length + command.start,
+      linePrefix.length + command.end,
+    );
+  }
+
+  function handleEditorKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    const commandMenuOpen = blockMenuOpen || Boolean(slashMenu);
+    if (!commandMenuOpen) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeBlockMenus();
+      return;
+    }
+
+    if (!visibleBlockCommands.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveBlockCommandIndex((current) => (current + 1) % visibleBlockCommands.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveBlockCommandIndex((current) => (current - 1 + visibleBlockCommands.length) % visibleBlockCommands.length);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      insertBlockCommand(visibleBlockCommands[activeBlockCommandIndex]?.id ?? visibleBlockCommands[0].id);
+    }
   }
 
   function insertMarkdown(format: MarkdownFormat) {
@@ -1802,6 +2070,20 @@ export default function Home() {
                         Preview
                       </button>
                     </div>
+                    <button
+                      className={blockMenuOpen ? "toolbarActive" : ""}
+                      onClick={() => {
+                        setEditorMode("write");
+                        setSlashMenu(null);
+                        setBlockMenuOpen((current) => !current);
+                        window.setTimeout(() => editorRef.current?.focus(), 0);
+                      }}
+                      type="button"
+                      aria-label="Insert block"
+                      title="Insert block"
+                    >
+                      <Plus size={16} strokeWidth={2.3} />
+                    </button>
                     <button onClick={() => insertMarkdown("heading")} type="button" aria-label="Heading" title="Heading">
                       <Heading1 size={16} strokeWidth={2.3} />
                     </button>
@@ -1827,13 +2109,41 @@ export default function Home() {
                       <Code2 size={16} strokeWidth={2.3} />
                     </button>
                   </div>
+                  {commandMenuOpen && (
+                    <div className="blockCommandMenu" role="listbox" aria-label="Insert blocks">
+                      {visibleBlockCommands.map((command, index) => {
+                        const CommandIcon = command.icon;
+                        const isActive = index === activeBlockCommandIndex;
+                        return (
+                          <button
+                            key={command.id}
+                            className={isActive ? "blockCommandActive" : "blockCommand"}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => insertBlockCommand(command.id)}
+                            role="option"
+                            aria-selected={isActive}
+                            type="button"
+                          >
+                            <CommandIcon size={16} strokeWidth={2.3} />
+                            <span>
+                              <strong>{command.label}</strong>
+                              <small>{command.description}</small>
+                            </span>
+                          </button>
+                        );
+                      })}
+                      {!visibleBlockCommands.length && <p className="emptySmall">No blocks match.</p>}
+                    </div>
+                  )}
                   {editorMode === "write" ? (
                     <textarea
                       ref={editorRef}
                       className="editor"
                       value={noteParts.body}
-                      onChange={(e) => updateNoteBody(e.target.value)}
-                      placeholder="Start writing in Markdown..."
+                      onChange={(e) => handleEditorChange(e.target.value, e.target.selectionStart)}
+                      onKeyDown={handleEditorKeyDown}
+                      onSelect={(e) => syncSlashMenu(e.currentTarget.value, e.currentTarget.selectionStart)}
+                      placeholder="Start writing..."
                     />
                   ) : (
                     <div className="markdownPreview" aria-label="Markdown preview">
@@ -1856,6 +2166,7 @@ export default function Home() {
                           if (block.type === "bullet") return <p key={index} className="previewBullet">{block.text}</p>;
                           if (block.type === "quote") return <blockquote key={index}>{block.text}</blockquote>;
                           if (block.type === "code") return <pre key={index}>{block.text}</pre>;
+                          if (block.type === "divider") return <hr key={index} />;
                           return <p key={index}>{block.text}</p>;
                         })
                       ) : (

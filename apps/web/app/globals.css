@@ -1420,6 +1420,7 @@ small {
 .titleInput,
 .editor,
 .editorToolbar,
+.blockCommandMenu,
 .markdownPreview,
 .editorFooter {
   width: min(800px, calc(100% - 72px));
@@ -1476,6 +1477,11 @@ small {
   color: var(--ink);
 }
 
+.editorToolbar > button.toolbarActive {
+  background: var(--ink);
+  color: #fff;
+}
+
 .editorModeToggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(66px, 1fr));
@@ -1497,6 +1503,76 @@ small {
 .editorModeToggle .editorModeActive {
   background: var(--ink);
   color: #fff;
+}
+
+.blockCommandMenu {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: -4px 0 16px;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 40px rgba(24, 32, 28, 0.1);
+}
+
+.blockCommand,
+.blockCommandActive {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+}
+
+.blockCommand:hover,
+.blockCommandActive {
+  border-color: #c8d4ce;
+  background: var(--paper-strong);
+  color: var(--ink);
+}
+
+.blockCommand svg,
+.blockCommandActive svg {
+  color: var(--brand);
+}
+
+.blockCommand span,
+.blockCommandActive span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.blockCommand strong,
+.blockCommandActive strong,
+.blockCommand small,
+.blockCommandActive small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blockCommand strong,
+.blockCommandActive strong {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.blockCommand small,
+.blockCommandActive small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .editor {
@@ -1570,6 +1646,12 @@ small {
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.55;
+}
+
+.markdownPreview hr {
+  margin: 1.4em 0;
+  border: 0;
+  border-top: 1px solid var(--line);
 }
 
 .previewCheck,
@@ -1853,6 +1935,23 @@ small {
   color: var(--ink);
 }
 
+:root[data-theme="dark"] .editorToolbar > button.toolbarActive {
+  background: #e7f2eb;
+  color: #101712;
+}
+
+:root[data-theme="dark"] .blockCommandMenu {
+  background: rgba(13, 19, 15, 0.96);
+  border-color: var(--line-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="dark"] .blockCommand:hover,
+:root[data-theme="dark"] .blockCommandActive {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: #415248;
+}
+
 :root[data-theme="dark"] .markdownPreview pre {
   background: #0b120e;
   border-color: var(--line);
@@ -2082,6 +2181,7 @@ small {
   .titleInput,
   .editor,
   .editorToolbar,
+  .blockCommandMenu,
   .markdownPreview,
   .editorFooter {
     width: calc(100% - 32px);
@@ -2104,6 +2204,12 @@ small {
 
   .editorModeToggle {
     flex: 0 0 146px;
+  }
+
+  .blockCommandMenu {
+    grid-template-columns: 1fr;
+    max-height: 236px;
+    overflow: auto;
   }
 
   .markdownPreview {
