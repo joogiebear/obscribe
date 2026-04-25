@@ -1127,6 +1127,8 @@ try {
 
     if ($method === 'POST' && preg_match('#^/notebooks/(\d+)/notes$#', $path, $matches)) {
         $notebook = notebook_for_workspace((int) $matches[1], $workspaceId);
+        $data = input();
+        $content = array_key_exists('content', $data) ? (string) $data['content'] : '';
         $stmt = db()->prepare(
             'INSERT INTO notes (notebook_id, content)
              VALUES (:notebook_id, :content)
@@ -1134,7 +1136,7 @@ try {
         );
         $stmt->execute([
             'notebook_id' => $notebook['id'],
-            'content' => '',
+            'content' => $content,
         ]);
 
         json_response($stmt->fetch(), 201);

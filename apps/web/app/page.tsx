@@ -54,12 +54,32 @@ type NotebookTemplateKey =
   | "client-workspace"
   | "research-notebook"
   | "content-planner";
+type NoteTemplateKey =
+  | "meeting-note"
+  | "daily-plan"
+  | "decision-record"
+  | "task-list"
+  | "project-update"
+  | "client-call";
 type NotebookTemplate = {
   key: NotebookTemplateKey;
+  type: "notebook";
   name: string;
   summary: string;
+  details: string;
   icon: LucideIcon;
 };
+type NoteTemplate = {
+  key: NoteTemplateKey;
+  type: "note";
+  name: string;
+  summary: string;
+  details: string;
+  content: string;
+  icon: LucideIcon;
+};
+type TemplateFilter = "all" | "notebook" | "note";
+type TemplateItem = NotebookTemplate | NoteTemplate;
 type MailStatus = { sent: boolean; driver: string; message?: string };
 type SearchNote = Note & { notebook_name: string };
 type SearchResults = { notebooks: Notebook[]; notes: SearchNote[] };
@@ -95,35 +115,114 @@ const API =
 const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
   {
     key: "meeting-notes",
+    type: "notebook",
     name: "Meeting Notes",
     summary: "Agenda, decisions, action items",
+    details: "Creates notes for recurring meetings, 1:1s, and decisions.",
     icon: ClipboardList,
   },
   {
     key: "project-hub",
+    type: "notebook",
     name: "Project Hub",
     summary: "Overview, tasks, milestones, risks",
+    details: "Creates a project workspace with planning and tracking notes.",
     icon: Briefcase,
   },
   {
     key: "client-workspace",
+    type: "notebook",
     name: "Client Workspace",
     summary: "Profile, calls, requirements",
+    details: "Creates a workspace for client context, calls, and requirements.",
     icon: Users,
   },
   {
     key: "research-notebook",
+    type: "notebook",
     name: "Research Notebook",
     summary: "Sources, findings, summary",
+    details: "Creates notes for sources, findings, and research synthesis.",
     icon: FileSearch,
   },
   {
     key: "content-planner",
+    type: "notebook",
     name: "Content Planner",
     summary: "Ideas, drafts, publishing checklist",
+    details: "Creates an editorial workspace for ideas, drafts, and publishing.",
     icon: PenLine,
   },
 ];
+
+const NOTE_TEMPLATES: NoteTemplate[] = [
+  {
+    key: "meeting-note",
+    type: "note",
+    name: "Meeting Note",
+    summary: "Agenda, decisions, next steps",
+    details: "Adds a single meeting note to the current notebook.",
+    icon: ClipboardList,
+    content:
+      "Meeting Note\n\n## Date\n\n## Attendees\n- \n\n## Agenda\n- \n\n## Decisions\n- \n\n## Action Items\n- [ ] Owner - task - due date\n\n## Follow-ups\n- ",
+  },
+  {
+    key: "daily-plan",
+    type: "note",
+    name: "Daily Plan",
+    summary: "Focus, schedule, shutdown",
+    details: "Adds a lightweight day plan to the current notebook.",
+    icon: CheckCircle2,
+    content:
+      "Daily Plan\n\n## Top Focus\n\n## Schedule\n- \n\n## Tasks\n- [ ] \n- [ ] \n- [ ] \n\n## Shutdown Notes\n",
+  },
+  {
+    key: "decision-record",
+    type: "note",
+    name: "Decision Record",
+    summary: "Context, choice, tradeoffs",
+    details: "Adds a decision log entry to the current notebook.",
+    icon: FileText,
+    content:
+      "Decision Record\n\n## Decision\n\n## Context\n\n## Options Considered\n- \n\n## Tradeoffs\n\n## Owner\n\n## Date\n",
+  },
+  {
+    key: "task-list",
+    type: "note",
+    name: "Task List",
+    summary: "Grouped checklist",
+    details: "Adds a simple checklist note to the current notebook.",
+    icon: ListChecks,
+    content:
+      "Task List\n\n## Now\n- [ ] \n\n## Next\n- [ ] \n\n## Waiting\n- [ ] \n\n## Done\n- [x] ",
+  },
+  {
+    key: "project-update",
+    type: "note",
+    name: "Project Update",
+    summary: "Progress, blockers, asks",
+    details: "Adds a status update note to the current notebook.",
+    icon: Briefcase,
+    content:
+      "Project Update\n\n## Status\n\n## Progress Since Last Update\n- \n\n## Blockers\n- \n\n## Decisions Needed\n- \n\n## Next Steps\n- [ ] ",
+  },
+  {
+    key: "client-call",
+    type: "note",
+    name: "Client Call",
+    summary: "Goals, notes, commitments",
+    details: "Adds a client call note to the current notebook.",
+    icon: Users,
+    content:
+      "Client Call\n\n## Client\n\n## Goal\n\n## Notes\n- \n\n## Requirements\n- \n\n## Commitments\n- [ ] \n\n## Follow-up Email\n",
+  },
+];
+
+const TEMPLATE_LIBRARY: TemplateItem[] = [...NOTEBOOK_TEMPLATES, ...NOTE_TEMPLATES];
+
+function templateId(template: TemplateItem) {
+  return `${template.type}:${template.key}`;
+}
 
 function splitNoteContent(value: string) {
   const [firstLine = "", ...rest] = value.split("\n");
@@ -226,7 +325,9 @@ export default function Home() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [notebooksLoaded, setNotebooksLoaded] = useState(false);
   const [notebookName, setNotebookName] = useState("");
-  const [selectedTemplateKey, setSelectedTemplateKey] = useState<NotebookTemplateKey | "">("");
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [templateFilter, setTemplateFilter] = useState<TemplateFilter>("all");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [activeNotebook, setActiveNotebook] = useState<Notebook | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
@@ -570,7 +671,7 @@ export default function Home() {
         }),
       });
       setNotebookName("");
-      setSelectedTemplateKey("");
+      setSelectedTemplateId("");
       setActiveNotebook(notebook);
       setMobilePane("notes");
       await loadNotebooks();
@@ -583,24 +684,40 @@ export default function Home() {
 
   async function createNotebook(e: FormEvent) {
     e.preventDefault();
-    await createNotebookNamed(notebookName, selectedTemplateKey);
+    await createNotebookNamed(notebookName);
   }
 
-  async function createNote() {
+  async function createNote(initialContent = "") {
     if (!activeNotebook) return;
 
     try {
       const note = await api<Note>(`/notebooks/${activeNotebook.id}/notes`, {
         method: "POST",
+        body: JSON.stringify({ content: initialContent }),
       });
       setNotes((current) => [note, ...current]);
       setActiveNote(note);
       setMobilePane("editor");
-      setStatus("Note created");
-      window.setTimeout(() => titleInputRef.current?.focus(), 0);
+      setStatus(initialContent ? "Note template created" : "Note created");
+      window.setTimeout(() => (initialContent ? editorRef.current?.focus() : titleInputRef.current?.focus()), 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create note");
     }
+  }
+
+  async function useTemplate(template: TemplateItem) {
+    if (template.type === "notebook") {
+      await createNotebookNamed(template.name, template.key);
+      return;
+    }
+
+    if (!activeNotebook) {
+      setError("Choose a notebook before using a note template.");
+      setMobilePane("notebooks");
+      return;
+    }
+
+    await createNote(template.content);
   }
 
   async function deleteActiveNote() {
@@ -824,7 +941,17 @@ export default function Home() {
   });
   const noteParts = splitNoteContent(content);
   const previewBlocks = useMemo(() => markdownBlocks(noteParts.body), [noteParts.body]);
-  const selectedTemplate = NOTEBOOK_TEMPLATES.find((template) => template.key === selectedTemplateKey);
+  const filteredTemplates = useMemo(() => {
+    const query = templateQuery.trim().toLowerCase();
+    return TEMPLATE_LIBRARY.filter((template) => {
+      const matchesFilter = templateFilter === "all" || template.type === templateFilter;
+      const matchesQuery =
+        !query ||
+        `${template.name} ${template.summary} ${template.details}`.toLowerCase().includes(query);
+      return matchesFilter && matchesQuery;
+    });
+  }, [templateFilter, templateQuery]);
+  const selectedTemplate = TEMPLATE_LIBRARY.find((template) => templateId(template) === selectedTemplateId);
   const isDirty = activeNote ? (activeNote.content || "") !== content : false;
   const bodyWordCount = noteParts.body.trim() ? noteParts.body.trim().split(/\s+/).length : 0;
   const noteCountLabel = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
@@ -1364,45 +1491,96 @@ export default function Home() {
                   className="input"
                   value={notebookName}
                   onChange={(e) => setNotebookName(e.target.value)}
-                  placeholder={selectedTemplate ? selectedTemplate.name : "Notebook name"}
+                  placeholder="Notebook name"
                 />
                 <button
                   className="addButton"
                   aria-label="Create notebook"
-                  disabled={!notebookName.trim() && !selectedTemplateKey}
+                  disabled={!notebookName.trim()}
                 >
                   <Plus size={19} strokeWidth={2.4} />
                 </button>
               </form>
-              <div className="templatePicker" aria-label="Notebook templates">
-                <div className="templatePickerHeader">
-                  <span>Starter templates</span>
-                  {selectedTemplateKey && (
-                    <button onClick={() => setSelectedTemplateKey("")} type="button">
+              <div className="templateLibrary" aria-label="Template library">
+                <div className="templateLibraryHeader">
+                  <div>
+                    <span>Templates</span>
+                    <small>Notebook systems and starter notes</small>
+                  </div>
+                  {templateQuery && (
+                    <button onClick={() => setTemplateQuery("")} type="button">
                       Clear
                     </button>
                   )}
                 </div>
-                <div className="templateGrid">
-                  {NOTEBOOK_TEMPLATES.map((template) => {
+                <label className="templateSearch">
+                  <Search size={14} strokeWidth={2} />
+                  <input
+                    value={templateQuery}
+                    onChange={(e) => setTemplateQuery(e.target.value)}
+                    placeholder="Search templates"
+                  />
+                </label>
+                <div className="templateFilters" role="tablist" aria-label="Template type">
+                  {(["all", "notebook", "note"] as TemplateFilter[]).map((filter) => (
+                    <button
+                      key={filter}
+                      className={templateFilter === filter ? "templateFilterActive" : ""}
+                      onClick={() => setTemplateFilter(filter)}
+                      type="button"
+                    >
+                      {filter === "all" ? "All" : filter === "notebook" ? "Notebooks" : "Notes"}
+                    </button>
+                  ))}
+                </div>
+                <div className="templateResults">
+                  {filteredTemplates.map((template) => {
                     const TemplateIcon = template.icon;
+                    const id = templateId(template);
+                    const isSelected = selectedTemplateId === id;
+                    const disabled = template.type === "note" && !activeNotebook;
                     return (
-                      <button
-                        key={template.key}
-                        className={selectedTemplateKey === template.key ? "templateOptionActive" : "templateOption"}
-                        onClick={() => {
-                          setSelectedTemplateKey((current) => (current === template.key ? "" : template.key));
-                          if (!notebookName.trim()) setNotebookName(template.name);
-                        }}
-                        type="button"
+                      <div
+                        key={id}
+                        className={isSelected ? "templateResultActive" : "templateResult"}
+                        onClick={() => setSelectedTemplateId(id)}
+                        onDoubleClick={() => useTemplate(template)}
+                        title={template.type === "note" ? "Use in the current notebook" : "Create this notebook system"}
                       >
                         <TemplateIcon size={15} strokeWidth={2.2} />
-                        <span>{template.name}</span>
-                        <small>{template.summary}</small>
-                      </button>
+                        <div className="templateResultCopy">
+                          <span>{template.name}</span>
+                          <small>{template.summary}</small>
+                        </div>
+                        <em>{template.type === "notebook" ? "Notebook" : "Note"}</em>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            useTemplate(template);
+                          }}
+                          disabled={disabled}
+                          type="button"
+                        >
+                          {disabled ? "Select notebook" : "Use"}
+                        </button>
+                      </div>
                     );
                   })}
+                  {!filteredTemplates.length && <p className="emptySmall">No templates match that search.</p>}
                 </div>
+                {selectedTemplate && (
+                  <div className="templatePreview">
+                    <span>{selectedTemplate.type === "notebook" ? "Builds a notebook" : "Adds a note"}</span>
+                    <p>{selectedTemplate.details}</p>
+                    <button
+                      onClick={() => useTemplate(selectedTemplate)}
+                      disabled={selectedTemplate.type === "note" && !activeNotebook}
+                      type="button"
+                    >
+                      {selectedTemplate.type === "note" && !activeNotebook ? "Select notebook first" : "Use template"}
+                    </button>
+                  </div>
+                )}
               </div>
               <label className="searchWrap">
                 <Search size={15} strokeWidth={2} />
@@ -1516,7 +1694,7 @@ export default function Home() {
                   <p className="railMeta">{noteCountLabel}</p>
                 </div>
                 <button
-                  onClick={createNote}
+                  onClick={() => createNote()}
                   className="newNote"
                   disabled={!activeNotebook}
                   type="button"
@@ -1555,7 +1733,7 @@ export default function Home() {
                   );
                 })}
                 {!notes.length && (
-                  <button className="emptyAction" onClick={createNote} disabled={!activeNotebook} type="button">
+                  <button className="emptyAction" onClick={() => createNote()} disabled={!activeNotebook} type="button">
                     Create your first note
                   </button>
                 )}
@@ -1702,7 +1880,7 @@ export default function Home() {
                     <p className="kicker">{activeNotebook?.name ?? "Notebook"}</p>
                     <h2>Start a note</h2>
                     <p>Capture a thought, meeting, project plan, or working draft.</p>
-                    <button className="primary emptyStateButton" onClick={createNote} disabled={!activeNotebook} type="button">
+                    <button className="primary emptyStateButton" onClick={() => createNote()} disabled={!activeNotebook} type="button">
                       <Plus size={16} strokeWidth={2.4} />
                       New note
                     </button>
