@@ -946,13 +946,13 @@ textarea:focus-visible {
 .templateResultActive {
   width: 100%;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr);
   column-gap: 8px;
   row-gap: 5px;
-  align-items: center;
+  align-items: start;
   border: 1px solid transparent;
   border-radius: 7px;
-  padding: 8px;
+  padding: 9px;
   background: transparent;
   color: var(--ink-soft);
   text-align: left;
@@ -971,6 +971,8 @@ textarea:focus-visible {
 
 .templateResult svg,
 .templateResultActive svg {
+  grid-row: 1 / span 3;
+  margin-top: 2px;
   color: var(--brand);
 }
 
@@ -982,21 +984,19 @@ textarea:focus-visible {
 
 .templateResultCopy span {
   min-width: 0;
-  overflow: hidden;
   color: var(--ink);
   font-size: 13px;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .templateResultCopy small {
   min-width: 0;
-  overflow: hidden;
   color: var(--muted);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .templateResult em,
@@ -1016,6 +1016,8 @@ textarea:focus-visible {
 .templateResult > button,
 .templateResultActive > button,
 .templatePreview button {
+  grid-column: 2;
+  justify-self: start;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 6px 8px;
