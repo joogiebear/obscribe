@@ -54,32 +54,15 @@ type NotebookTemplateKey =
   | "client-workspace"
   | "research-notebook"
   | "content-planner";
-type NoteTemplateKey =
-  | "meeting-note"
-  | "daily-plan"
-  | "decision-record"
-  | "task-list"
-  | "project-update"
-  | "client-call";
 type NotebookTemplate = {
   key: NotebookTemplateKey;
   type: "notebook";
   name: string;
   summary: string;
   details: string;
+  includes: string[];
   icon: LucideIcon;
 };
-type NoteTemplate = {
-  key: NoteTemplateKey;
-  type: "note";
-  name: string;
-  summary: string;
-  details: string;
-  content: string;
-  icon: LucideIcon;
-};
-type TemplateFilter = "all" | "notebook" | "note";
-type TemplateItem = NotebookTemplate | NoteTemplate;
 type MailStatus = { sent: boolean; driver: string; message?: string };
 type SearchNote = Note & { notebook_name: string };
 type SearchResults = { notebooks: Notebook[]; notes: SearchNote[] };
@@ -119,6 +102,7 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
     name: "Meeting Notes",
     summary: "Agenda, decisions, action items",
     details: "Creates notes for recurring meetings, 1:1s, and decisions.",
+    includes: ["Meeting Notes", "1:1 Notes", "Decision Log"],
     icon: ClipboardList,
   },
   {
@@ -127,6 +111,7 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
     name: "Project Hub",
     summary: "Overview, tasks, milestones, risks",
     details: "Creates a project workspace with planning and tracking notes.",
+    includes: ["Project Overview", "Tasks", "Milestones", "Risks and Decisions"],
     icon: Briefcase,
   },
   {
@@ -135,6 +120,7 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
     name: "Client Workspace",
     summary: "Profile, calls, requirements",
     details: "Creates a workspace for client context, calls, and requirements.",
+    includes: ["Client Profile", "Call Notes", "Requirements"],
     icon: Users,
   },
   {
@@ -143,6 +129,7 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
     name: "Research Notebook",
     summary: "Sources, findings, summary",
     details: "Creates notes for sources, findings, and research synthesis.",
+    includes: ["Research Brief", "Sources", "Findings"],
     icon: FileSearch,
   },
   {
@@ -151,78 +138,10 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
     name: "Content Planner",
     summary: "Ideas, drafts, publishing checklist",
     details: "Creates an editorial workspace for ideas, drafts, and publishing.",
+    includes: ["Content Ideas", "Draft Template", "Publishing Checklist"],
     icon: PenLine,
   },
 ];
-
-const NOTE_TEMPLATES: NoteTemplate[] = [
-  {
-    key: "meeting-note",
-    type: "note",
-    name: "Meeting Note",
-    summary: "Agenda, decisions, next steps",
-    details: "Adds a single meeting note to the current notebook.",
-    icon: ClipboardList,
-    content:
-      "Meeting Note\n\n## Date\n\n## Attendees\n- \n\n## Agenda\n- \n\n## Decisions\n- \n\n## Action Items\n- [ ] Owner - task - due date\n\n## Follow-ups\n- ",
-  },
-  {
-    key: "daily-plan",
-    type: "note",
-    name: "Daily Plan",
-    summary: "Focus, schedule, shutdown",
-    details: "Adds a lightweight day plan to the current notebook.",
-    icon: CheckCircle2,
-    content:
-      "Daily Plan\n\n## Top Focus\n\n## Schedule\n- \n\n## Tasks\n- [ ] \n- [ ] \n- [ ] \n\n## Shutdown Notes\n",
-  },
-  {
-    key: "decision-record",
-    type: "note",
-    name: "Decision Record",
-    summary: "Context, choice, tradeoffs",
-    details: "Adds a decision log entry to the current notebook.",
-    icon: FileText,
-    content:
-      "Decision Record\n\n## Decision\n\n## Context\n\n## Options Considered\n- \n\n## Tradeoffs\n\n## Owner\n\n## Date\n",
-  },
-  {
-    key: "task-list",
-    type: "note",
-    name: "Task List",
-    summary: "Grouped checklist",
-    details: "Adds a simple checklist note to the current notebook.",
-    icon: ListChecks,
-    content:
-      "Task List\n\n## Now\n- [ ] \n\n## Next\n- [ ] \n\n## Waiting\n- [ ] \n\n## Done\n- [x] ",
-  },
-  {
-    key: "project-update",
-    type: "note",
-    name: "Project Update",
-    summary: "Progress, blockers, asks",
-    details: "Adds a status update note to the current notebook.",
-    icon: Briefcase,
-    content:
-      "Project Update\n\n## Status\n\n## Progress Since Last Update\n- \n\n## Blockers\n- \n\n## Decisions Needed\n- \n\n## Next Steps\n- [ ] ",
-  },
-  {
-    key: "client-call",
-    type: "note",
-    name: "Client Call",
-    summary: "Goals, notes, commitments",
-    details: "Adds a client call note to the current notebook.",
-    icon: Users,
-    content:
-      "Client Call\n\n## Client\n\n## Goal\n\n## Notes\n- \n\n## Requirements\n- \n\n## Commitments\n- [ ] \n\n## Follow-up Email\n",
-  },
-];
-
-const TEMPLATE_LIBRARY: TemplateItem[] = [...NOTEBOOK_TEMPLATES, ...NOTE_TEMPLATES];
-
-function templateId(template: TemplateItem) {
-  return `${template.type}:${template.key}`;
-}
 
 function splitNoteContent(value: string) {
   const [firstLine = "", ...rest] = value.split("\n");
@@ -326,8 +245,8 @@ export default function Home() {
   const [notebooksLoaded, setNotebooksLoaded] = useState(false);
   const [notebookName, setNotebookName] = useState("");
   const [templateQuery, setTemplateQuery] = useState("");
-  const [templateFilter, setTemplateFilter] = useState<TemplateFilter>("all");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [activeNotebook, setActiveNotebook] = useState<Notebook | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
@@ -361,6 +280,7 @@ export default function Home() {
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const globalSearchRef = useRef<HTMLInputElement | null>(null);
+  const templateSearchRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -541,6 +461,12 @@ export default function Home() {
   }, [activeNote, content, saveNote]);
 
   useEffect(() => {
+    if (!templateDialogOpen) return;
+    setSelectedTemplateId((current) => current || NOTEBOOK_TEMPLATES[0]?.key || "");
+    window.setTimeout(() => templateSearchRef.current?.focus(), 0);
+  }, [templateDialogOpen]);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       const key = event.key.toLowerCase();
       const command = event.metaKey || event.ctrlKey;
@@ -568,6 +494,7 @@ export default function Home() {
         setRenamingNotebookId(null);
         setGlobalQuery("");
         setSearchResults(null);
+        setTemplateDialogOpen(false);
       }
     }
 
@@ -578,6 +505,16 @@ export default function Home() {
   function switchAuthMode(nextMode: AuthMode) {
     setMode(nextMode);
     setError("");
+  }
+
+  function openTemplateDialog() {
+    setTemplateDialogOpen(true);
+    setSelectedTemplateId((current) => current || NOTEBOOK_TEMPLATES[0]?.key || "");
+  }
+
+  function closeTemplateDialog() {
+    setTemplateDialogOpen(false);
+    setTemplateQuery("");
   }
 
   async function auth(e: FormEvent) {
@@ -677,6 +614,8 @@ export default function Home() {
       if (!notebook) return;
       setNotebookName("");
       setSelectedTemplateId("");
+      setTemplateDialogOpen(false);
+      setTemplateQuery("");
       setActiveNotebook(notebook);
       setMobilePane("notes");
       await loadNotebooks();
@@ -713,29 +652,8 @@ export default function Home() {
     }
   }
 
-  async function useTemplate(template: TemplateItem) {
-    if (template.type === "notebook") {
-      await createNotebookNamed(template.name, template.key);
-      return;
-    }
-
-    let targetNotebook: Notebook | null = activeNotebook ?? notebooks[0] ?? null;
-
-    try {
-      if (!targetNotebook) {
-        const quickNotebook = await createNotebookRecord("Quick Notes");
-        if (!quickNotebook) return;
-        targetNotebook = quickNotebook;
-        setNotebooks((current) => [quickNotebook, ...current]);
-        setNotebooksLoaded(true);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create notebook");
-      setNotebooksLoaded(true);
-      return;
-    }
-
-    await createNote(template.content, targetNotebook);
+  async function useTemplate(template: NotebookTemplate) {
+    await createNotebookNamed(template.name, template.key);
   }
 
   async function deleteActiveNote() {
@@ -961,15 +879,14 @@ export default function Home() {
   const previewBlocks = useMemo(() => markdownBlocks(noteParts.body), [noteParts.body]);
   const filteredTemplates = useMemo(() => {
     const query = templateQuery.trim().toLowerCase();
-    return TEMPLATE_LIBRARY.filter((template) => {
-      const matchesFilter = templateFilter === "all" || template.type === templateFilter;
-      const matchesQuery =
-        !query ||
-        `${template.name} ${template.summary} ${template.details}`.toLowerCase().includes(query);
-      return matchesFilter && matchesQuery;
+    return NOTEBOOK_TEMPLATES.filter((template) => {
+      if (!query) return true;
+      return `${template.name} ${template.summary} ${template.details} ${template.includes.join(" ")}`.toLowerCase().includes(query);
     });
-  }, [templateFilter, templateQuery]);
-  const selectedTemplate = TEMPLATE_LIBRARY.find((template) => templateId(template) === selectedTemplateId);
+  }, [templateQuery]);
+  const selectedTemplate =
+    filteredTemplates.find((template) => template.key === selectedTemplateId) ?? filteredTemplates[0] ?? null;
+  const SelectedTemplateIcon = selectedTemplate?.icon;
   const isDirty = activeNote ? (activeNote.content || "") !== content : false;
   const bodyWordCount = noteParts.body.trim() ? noteParts.body.trim().split(/\s+/).length : 0;
   const noteCountLabel = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
@@ -1519,84 +1436,13 @@ export default function Home() {
                   <Plus size={19} strokeWidth={2.4} />
                 </button>
               </form>
-              <div className="templateLibrary" aria-label="Template library">
-                <div className="templateLibraryHeader">
-                  <div>
-                    <span>Templates</span>
-                    <small>Notebook systems and starter notes</small>
-                  </div>
-                  {templateQuery && (
-                    <button onClick={() => setTemplateQuery("")} type="button">
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <label className="templateSearch">
-                  <Search size={14} strokeWidth={2} />
-                  <input
-                    value={templateQuery}
-                    onChange={(e) => setTemplateQuery(e.target.value)}
-                    placeholder="Search templates"
-                  />
-                </label>
-                <div className="templateFilters" role="tablist" aria-label="Template type">
-                  {(["all", "notebook", "note"] as TemplateFilter[]).map((filter) => (
-                    <button
-                      key={filter}
-                      className={templateFilter === filter ? "templateFilterActive" : ""}
-                      onClick={() => setTemplateFilter(filter)}
-                      type="button"
-                    >
-                      {filter === "all" ? "All" : filter === "notebook" ? "Notebooks" : "Notes"}
-                    </button>
-                  ))}
-                </div>
-                <div className="templateResults">
-                  {filteredTemplates.map((template) => {
-                    const TemplateIcon = template.icon;
-                    const id = templateId(template);
-                    const isSelected = selectedTemplateId === id;
-                    return (
-                      <div
-                        key={id}
-                        className={isSelected ? "templateResultActive" : "templateResult"}
-                        onClick={() => setSelectedTemplateId(id)}
-                        onDoubleClick={() => useTemplate(template)}
-                        title="Use this template"
-                      >
-                        <TemplateIcon size={15} strokeWidth={2.2} />
-                        <div className="templateResultCopy">
-                          <span>{template.name}</span>
-                          <small>{template.summary}</small>
-                        </div>
-                        <em>{template.type === "notebook" ? "Notebook" : "Note"}</em>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            useTemplate(template);
-                          }}
-                          type="button"
-                        >
-                          Use
-                        </button>
-                      </div>
-                    );
-                  })}
-                  {!filteredTemplates.length && <p className="emptySmall">No templates match that search.</p>}
-                </div>
-                {selectedTemplate && (
-                  <div className="templatePreview">
-                    <span>{selectedTemplate.type === "notebook" ? "Builds a notebook" : "Adds a note"}</span>
-                    <p>{selectedTemplate.details}</p>
-                    <button
-                      onClick={() => useTemplate(selectedTemplate)}
-                      type="button"
-                    >
-                      Use template
-                    </button>
-                  </div>
-                )}
-              </div>
+              <button className="templateLauncher" onClick={openTemplateDialog} type="button">
+                <ClipboardList size={17} strokeWidth={2.3} />
+                <span>
+                  Templates
+                  <small>Start with a notebook system</small>
+                </span>
+              </button>
               <label className="searchWrap">
                 <Search size={15} strokeWidth={2} />
                 <input
@@ -1910,6 +1756,94 @@ export default function Home() {
               )}
             </section>
           </section>
+          {templateDialogOpen && (
+            <div className="templateOverlay" onMouseDown={closeTemplateDialog} role="presentation">
+              <section
+                className="templateDialog"
+                aria-labelledby="templateDialogTitle"
+                aria-modal="true"
+                onMouseDown={(event) => event.stopPropagation()}
+                role="dialog"
+              >
+                <div className="templateDialogHeader">
+                  <div>
+                    <p className="kicker">Templates</p>
+                    <h2 id="templateDialogTitle">Start with a notebook system</h2>
+                    <p>Each template creates a notebook with starter notes already inside.</p>
+                  </div>
+                  <button className="iconButton" onClick={closeTemplateDialog} aria-label="Close templates" type="button">
+                    <X size={17} strokeWidth={2.4} />
+                  </button>
+                </div>
+
+                <label className="templateDialogSearch">
+                  <Search size={16} strokeWidth={2} />
+                  <input
+                    ref={templateSearchRef}
+                    value={templateQuery}
+                    onChange={(e) => setTemplateQuery(e.target.value)}
+                    placeholder="Search notebook templates"
+                  />
+                  {templateQuery && (
+                    <button onClick={() => setTemplateQuery("")} type="button">
+                      Clear
+                    </button>
+                  )}
+                </label>
+
+                <div className="templateDialogBody">
+                  <div className="templateChoiceList" aria-label="Notebook templates">
+                    {filteredTemplates.map((template) => {
+                      const TemplateIcon = template.icon;
+                      const isSelected = selectedTemplate?.key === template.key;
+                      return (
+                        <button
+                          key={template.key}
+                          className={isSelected ? "templateChoiceActive" : "templateChoice"}
+                          onClick={() => setSelectedTemplateId(template.key)}
+                          onDoubleClick={() => useTemplate(template)}
+                          type="button"
+                        >
+                          <TemplateIcon size={17} strokeWidth={2.3} />
+                          <span>
+                            <strong>{template.name}</strong>
+                            <small>{template.summary}</small>
+                          </span>
+                          <em>{template.includes.length} notes</em>
+                        </button>
+                      );
+                    })}
+                    {!filteredTemplates.length && <p className="emptySmall">No templates match that search.</p>}
+                  </div>
+
+                  {selectedTemplate && (
+                    <div className="templateDetail">
+                      <div className="templateDetailIcon">
+                        {SelectedTemplateIcon && <SelectedTemplateIcon size={24} strokeWidth={2.2} />}
+                      </div>
+                      <p className="kicker">Notebook system</p>
+                      <h3>{selectedTemplate.name}</h3>
+                      <p>{selectedTemplate.details}</p>
+                      <div className="templateIncludes">
+                        <span>Starter notes</span>
+                        <ul>
+                          {selectedTemplate.includes.map((item) => (
+                            <li key={item}>
+                              <Check size={14} strokeWidth={2.4} />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <button className="primary templateUseButton" onClick={() => useTemplate(selectedTemplate)} type="button">
+                        Use template
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
         </>
       )}
     </main>
