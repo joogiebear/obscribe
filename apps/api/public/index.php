@@ -390,12 +390,38 @@ function require_fields(array $data, array $fields): void
     }
 }
 
+function admin_emails(): array
+{
+    $value = trim((string) env_value('ADMIN_EMAILS', ''));
+    if ($value === '') {
+        return [];
+    }
+
+    return array_values(array_filter(array_map(
+        static fn (string $email): string => strtolower(trim($email)),
+        explode(',', $value),
+    )));
+}
+
+function is_admin_user(array $user): bool
+{
+    return in_array(strtolower(trim((string) $user['email'])), admin_emails(), true);
+}
+
+function require_admin(array $user): void
+{
+    if (!is_admin_user($user)) {
+        json_response(['message' => 'Admin access required.'], 403);
+    }
+}
+
 function public_user(array $user): array
 {
     return [
         'id' => (int) $user['id'],
         'name' => $user['name'],
         'email' => $user['email'],
+        'is_admin' => is_admin_user($user),
     ];
 }
 
@@ -1045,6 +1071,8 @@ try {
     $workspaceId = (int) $workspace['id'];
 
     if ($method === 'GET' && $path === '/status') {
+        require_admin($user);
+
         $stmt = db()->prepare('SELECT count(*) AS total FROM notebooks WHERE workspace_id = :workspace_id');
         $stmt->execute(['workspace_id' => $workspaceId]);
         $notebookCount = (int) $stmt->fetch()['total'];
@@ -1105,6 +1133,8 @@ try {
     }
 
     if ($method === 'POST' && $path === '/mail/test') {
+        require_admin($user);
+
         $mail = send_test_email($user);
         json_response([
             'mail' => $mail,

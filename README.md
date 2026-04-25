@@ -41,11 +41,14 @@ The installer will ask for:
 
 - public domain, for example `notes.example.com`
 - SSL certificate notice email, for example `admin@example.com`
+- admin email address, for example `owner@example.com`
 
 For a non-interactive install:
 
 ```bash
-OBSCRIBE_DOMAIN=notes.example.com OBSCRIBE_ACME_EMAIL=admin@example.com \
+OBSCRIBE_DOMAIN=notes.example.com \
+OBSCRIBE_ACME_EMAIL=admin@example.com \
+OBSCRIBE_ADMIN_EMAILS=owner@example.com \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
 ```
 
@@ -57,6 +60,8 @@ OBSCRIBE_DOMAIN=notes.example.com OBSCRIBE_ACME_EMAIL=admin@example.com \
 ```
 
 The SSL email is only used by Caddy/Let's Encrypt for certificate notices. App email is separate and currently defaults to log-only delivery with `MAIL_FROM_ADDRESS=no-reply@your-domain`.
+
+The admin email controls owner-only settings inside the app, including email delivery tests and self-host health checks. Register with an email listed in `ADMIN_EMAILS` to unlock those controls. Multiple owner emails can be comma-separated.
 
 To configure SMTP during an existing install:
 
@@ -78,13 +83,14 @@ OBSCRIBE_MAIL_FROM_NAME=Obscribe \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
 ```
 
-When SMTP is enabled, new registrations send a welcome email. Password reset and invitation flows will use the same settings when those product flows are added.
+When SMTP is enabled, new registrations send a welcome email and password recovery uses the same delivery settings. Future invitation flows will use them too.
 
 Before public launch, confirm `/opt/obscribe/.env`:
 
 ```env
 APP_DOMAIN=notes.example.com
 ACME_EMAIL=admin@example.com
+ADMIN_EMAILS=owner@example.com
 APP_URL=https://notes.example.com
 NEXT_PUBLIC_APP_URL=https://notes.example.com
 NEXT_PUBLIC_API_BASE_URL=/api
@@ -107,7 +113,9 @@ curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/de
 Optional installer settings:
 
 ```bash
-OBSCRIBE_HOME=/srv/obscribe OBSCRIBE_REPO_REF=main \
+OBSCRIBE_HOME=/srv/obscribe \
+OBSCRIBE_REPO_REF=main \
+OBSCRIBE_ADMIN_EMAILS=owner@example.com \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
 ```
 

@@ -42,7 +42,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 
 type AuthMode = "login" | "register" | "forgot" | "reset";
 type ThemeMode = "light" | "dark";
-type User = { id: number; name: string; email: string };
+type User = { id: number; name: string; email: string; is_admin: boolean };
 type Workspace = { id: number; name: string };
 type Notebook = { id: number; workspace_id: number; name: string };
 type Note = {
@@ -543,10 +543,10 @@ export default function Home() {
   }, [loadMe, loadNotebooks, logout, token]);
 
   useEffect(() => {
-    if (token && activeView === "settings") {
+    if (token && activeView === "settings" && user?.is_admin) {
       loadAppStatus();
     }
-  }, [activeView, loadAppStatus, token]);
+  }, [activeView, loadAppStatus, token, user?.is_admin]);
 
   useEffect(() => {
     if (!activeNotebook) {
@@ -912,7 +912,7 @@ export default function Home() {
       setActiveNotebook(refreshedNotebooks[0] ?? null);
       setActiveNote(null);
       setContent("");
-      await loadAppStatus();
+      if (user?.is_admin) await loadAppStatus();
       setImportStatus(
         `Imported ${data.imported.notebooks} ${data.imported.notebooks === 1 ? "notebook" : "notebooks"} and ${data.imported.notes} ${data.imported.notes === 1 ? "note" : "notes"}.`,
       );
@@ -1007,6 +1007,7 @@ export default function Home() {
   const selectedTemplate =
     filteredTemplates.find((template) => template.key === selectedTemplateId) ?? filteredTemplates[0] ?? null;
   const SelectedTemplateIcon = selectedTemplate?.icon;
+  const isAdmin = Boolean(user?.is_admin);
   const isDirty = activeNote ? (activeNote.content || "") !== content : false;
   const bodyWordCount = noteParts.body.trim() ? noteParts.body.trim().split(/\s+/).length : 0;
   const noteCountLabel = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
@@ -1427,22 +1428,24 @@ export default function Home() {
               </form>
             </section>
 
-            <section className="settingsPanel" aria-labelledby="install-title">
-              <div className="settingsPanelHeader">
-                <Mail size={18} strokeWidth={2} />
-                <div>
-                  <p className="kicker">Self-hosting</p>
-                  <h3 id="install-title">Email delivery</h3>
+            {isAdmin && (
+              <section className="settingsPanel" aria-labelledby="install-title">
+                <div className="settingsPanelHeader">
+                  <Mail size={18} strokeWidth={2} />
+                  <div>
+                    <p className="kicker">Self-hosting</p>
+                    <h3 id="install-title">Email delivery</h3>
+                  </div>
                 </div>
-              </div>
-              <p className="settingsCopy">
-                Send a test email to confirm registration, password recovery, and notification mail are configured.
-              </p>
-              <button onClick={sendTestEmail} className="secondary" type="button">
-                <Mail size={16} strokeWidth={2} />
-                Send test email
-              </button>
-            </section>
+                <p className="settingsCopy">
+                  Send a test email to confirm registration, password recovery, and notification mail are configured.
+                </p>
+                <button onClick={sendTestEmail} className="secondary" type="button">
+                  <Mail size={16} strokeWidth={2} />
+                  Send test email
+                </button>
+              </section>
+            )}
 
             <section className="settingsPanel" aria-labelledby="data-title">
               <div className="settingsPanelHeader">
@@ -1477,38 +1480,40 @@ export default function Home() {
               )}
             </section>
 
-            <section className="settingsPanel" aria-labelledby="operator-title">
-              <div className="settingsPanelHeader">
-                <RefreshCcw size={18} strokeWidth={2} />
-                <div>
-                  <p className="kicker">Operations</p>
-                  <h3 id="operator-title">Self-host checks</h3>
+            {isAdmin && (
+              <section className="settingsPanel" aria-labelledby="operator-title">
+                <div className="settingsPanelHeader">
+                  <RefreshCcw size={18} strokeWidth={2} />
+                  <div>
+                    <p className="kicker">Operations</p>
+                    <h3 id="operator-title">Self-host checks</h3>
+                  </div>
                 </div>
-              </div>
-              <p className="settingsCopy">
-                These checks help confirm your self-hosted workspace is recoverable and portable.
-              </p>
-              <div className="opsList">
-                <span className={statusLoaded ? "opsReady" : "opsMuted"}>
-                  <CheckCircle2 size={15} strokeWidth={2.2} />
-                  {statusLoaded ? "API connected" : "Checking API"}
-                </span>
-                <span className={appStatus?.mail.configured ? "opsReady" : "opsMuted"}>
-                  <CheckCircle2 size={15} strokeWidth={2.2} />
-                  {appStatus?.mail.configured ? "SMTP configured" : "SMTP status pending"}
-                </span>
-                <span className="opsReady">
-                  <CheckCircle2 size={15} strokeWidth={2.2} />
-                  Export and import available
-                </span>
-                <span className="opsMuted">
-                  <FileText size={15} strokeWidth={2.2} />
-                  {appStatus
-                    ? `${appStatus.counts.notebooks} ${appStatus.counts.notebooks === 1 ? "notebook" : "notebooks"} / ${appStatus.counts.notes} ${appStatus.counts.notes === 1 ? "note" : "notes"}`
-                    : "Workspace counts loading"}
-                </span>
-              </div>
-            </section>
+                <p className="settingsCopy">
+                  These checks help confirm your self-hosted workspace is recoverable and portable.
+                </p>
+                <div className="opsList">
+                  <span className={statusLoaded ? "opsReady" : "opsMuted"}>
+                    <CheckCircle2 size={15} strokeWidth={2.2} />
+                    {statusLoaded ? "API connected" : "Checking API"}
+                  </span>
+                  <span className={appStatus?.mail.configured ? "opsReady" : "opsMuted"}>
+                    <CheckCircle2 size={15} strokeWidth={2.2} />
+                    {appStatus?.mail.configured ? "SMTP configured" : "SMTP status pending"}
+                  </span>
+                  <span className="opsReady">
+                    <CheckCircle2 size={15} strokeWidth={2.2} />
+                    Export and import available
+                  </span>
+                  <span className="opsMuted">
+                    <FileText size={15} strokeWidth={2.2} />
+                    {appStatus
+                      ? `${appStatus.counts.notebooks} ${appStatus.counts.notebooks === 1 ? "notebook" : "notebooks"} / ${appStatus.counts.notes} ${appStatus.counts.notes === 1 ? "note" : "notes"}`
+                      : "Workspace counts loading"}
+                  </span>
+                </div>
+              </section>
+            )}
           </div>
         </section>
       ) : (

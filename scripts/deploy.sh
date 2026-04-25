@@ -298,6 +298,38 @@ configure_smtp() {
   echo "New registrations will send a welcome email."
 }
 
+configure_admin_emails() {
+  local current_admin_emails
+  local current_domain
+  local default_admin_email
+  local admin_emails
+
+  current_admin_emails="$(get_env_value ADMIN_EMAILS)"
+
+  if [ -n "${OBSCRIBE_ADMIN_EMAILS:-}" ]; then
+    admin_emails="${OBSCRIBE_ADMIN_EMAILS}"
+  elif [ -n "${current_admin_emails}" ]; then
+    admin_emails="${current_admin_emails}"
+  else
+    current_domain="$(get_env_value APP_DOMAIN)"
+    if [ "${current_domain:-localhost}" = "localhost" ]; then
+      default_admin_email="$(get_env_value ACME_EMAIL)"
+      default_admin_email="${default_admin_email:-admin@example.com}"
+    else
+      default_admin_email="admin@${current_domain}"
+    fi
+    admin_emails="$(prompt_value "Admin email address" "${default_admin_email}")"
+  fi
+
+  if [ -n "${admin_emails}" ]; then
+    set_env_value "ADMIN_EMAILS" "${admin_emails}"
+    echo "Admin email(s): ${admin_emails}"
+    echo "Register with one of these emails to unlock admin-only settings."
+  else
+    echo "No admin email configured. Set ADMIN_EMAILS in .env before public use."
+  fi
+}
+
 ensure_docker
 
 if [ ! -f "${ENV_FILE}" ]; then
@@ -315,6 +347,7 @@ if [ ! -f "${ENV_FILE}" ]; then
   fi
 
   ACME_EMAIL="$(prompt_value "Email for SSL certificate notices" "${DEFAULT_ACME_EMAIL}")"
+  ADMIN_EMAILS="${OBSCRIBE_ADMIN_EMAILS:-$(prompt_value "Admin email address" "${ACME_EMAIL}")}"
   MAIL_FROM_ADDRESS="${OBSCRIBE_MAIL_FROM:-$(domain_to_mail_from "${APP_DOMAIN}")}"
   DB_PASSWORD="$(openssl rand -hex 24 2>/dev/null || date +%s | sha256sum | cut -d' ' -f1)"
   AWS_SECRET="$(openssl rand -hex 24 2>/dev/null || date +%s%N | sha256sum | cut -d' ' -f1)"
@@ -323,6 +356,7 @@ if [ ! -f "${ENV_FILE}" ]; then
   set_env_value "APP_ENV" "production"
   set_env_value "APP_DOMAIN" "${APP_DOMAIN}"
   set_env_value "ACME_EMAIL" "${ACME_EMAIL}"
+  set_env_value "ADMIN_EMAILS" "${ADMIN_EMAILS}"
   set_env_value "APP_URL" "${APP_URL}"
   set_env_value "NEXT_PUBLIC_APP_URL" "${APP_URL}"
   set_env_value "NEXT_PUBLIC_API_URL" "/api"
@@ -373,6 +407,7 @@ else
 fi
 
 sanitize_env_file
+configure_admin_emails
 configure_smtp
 sanitize_env_file
 
