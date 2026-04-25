@@ -56,7 +56,17 @@ type NotebookTemplateKey =
   | "project-hub"
   | "client-workspace"
   | "research-notebook"
-  | "content-planner";
+  | "content-planner"
+  | "startup-os"
+  | "product-management"
+  | "sales-pipeline"
+  | "hiring-pipeline"
+  | "learning-notebook"
+  | "personal-knowledge-base"
+  | "support-desk"
+  | "content-studio"
+  | "agency-client-hub"
+  | "dev-journal";
 type NotebookTemplate = {
   key: NotebookTemplateKey;
   type: "notebook";
@@ -143,6 +153,96 @@ const NOTEBOOK_TEMPLATES: NotebookTemplate[] = [
     details: "Creates an editorial workspace for ideas, drafts, and publishing.",
     includes: ["Content Ideas", "Draft Template", "Publishing Checklist"],
     icon: PenLine,
+  },
+  {
+    key: "startup-os",
+    type: "notebook",
+    name: "Startup Operating System",
+    summary: "Priorities, roadmap, metrics, updates",
+    details: "Creates a founder workspace for weekly focus, company context, roadmap decisions, metrics, and investor updates.",
+    includes: ["Company Overview", "Weekly Priorities", "Product Roadmap", "Metrics", "Investor Updates"],
+    icon: Briefcase,
+  },
+  {
+    key: "product-management",
+    type: "notebook",
+    name: "Product Management",
+    summary: "Briefs, feedback, specs, releases",
+    details: "Creates a product workspace for shaping features, collecting feedback, planning releases, and tracking decisions.",
+    includes: ["Product Brief", "User Feedback", "Feature Specs", "Release Plan", "Decision Log"],
+    icon: FileText,
+  },
+  {
+    key: "sales-pipeline",
+    type: "notebook",
+    name: "Sales Pipeline",
+    summary: "Leads, calls, objections, follow-ups",
+    details: "Creates a sales workspace for tracking opportunities from first lead through close and post-call follow-up.",
+    includes: ["Leads", "Discovery Calls", "Objections", "Follow-ups", "Closed Won and Lost Notes"],
+    icon: Users,
+  },
+  {
+    key: "hiring-pipeline",
+    type: "notebook",
+    name: "Hiring Pipeline",
+    summary: "Role brief, interviews, scorecards",
+    details: "Creates a hiring workspace for defining roles, running structured interviews, and keeping candidate notes organized.",
+    includes: ["Role Brief", "Candidate Notes", "Interview Questions", "Scorecard", "Offer Process"],
+    icon: ClipboardList,
+  },
+  {
+    key: "learning-notebook",
+    type: "notebook",
+    name: "Learning Notebook",
+    summary: "Study plan, reading notes, concepts",
+    details: "Creates a personal learning workspace for study plans, reading notes, practice, and synthesis.",
+    includes: ["Study Plan", "Reading Notes", "Concepts", "Practice Log", "Summary"],
+    icon: BookOpen,
+  },
+  {
+    key: "personal-knowledge-base",
+    type: "notebook",
+    name: "Personal Knowledge Base",
+    summary: "Inbox, people, ideas, references",
+    details: "Creates a lightweight personal knowledge system for ideas, references, people, and weekly review.",
+    includes: ["Inbox", "People", "Ideas", "References", "Weekly Review"],
+    icon: BookOpen,
+  },
+  {
+    key: "support-desk",
+    type: "notebook",
+    name: "Support Desk",
+    summary: "Issues, reports, resolutions, FAQ",
+    details: "Creates a support workspace for customer issues, bug reproduction, resolutions, and reusable answers.",
+    includes: ["Open Issues", "Customer Reports", "Bug Reproduction", "Resolutions", "FAQ Drafts"],
+    icon: CheckCircle2,
+  },
+  {
+    key: "content-studio",
+    type: "notebook",
+    name: "Content Studio",
+    summary: "Calendar, ideas, drafts, distribution",
+    details: "Creates a content production workspace for planning, drafting, publishing, and performance notes.",
+    includes: ["Content Calendar", "Ideas", "Drafts", "Distribution Checklist", "Performance Notes"],
+    icon: PenLine,
+  },
+  {
+    key: "agency-client-hub",
+    type: "notebook",
+    name: "Agency Client Hub",
+    summary: "Brief, deliverables, approvals, billing",
+    details: "Creates an agency workspace for client briefs, deliverables, meetings, approvals, and billing context.",
+    includes: ["Client Brief", "Deliverables", "Meeting Notes", "Approvals", "Billing Notes"],
+    icon: Briefcase,
+  },
+  {
+    key: "dev-journal",
+    type: "notebook",
+    name: "Dev Journal",
+    summary: "Architecture, bugs, commands, deploys",
+    details: "Creates an engineering notebook for architecture notes, debugging, deploy records, and postmortems.",
+    includes: ["Architecture Notes", "Bugs", "Commands", "Deploy Notes", "Postmortems"],
+    icon: Code2,
   },
 ];
 

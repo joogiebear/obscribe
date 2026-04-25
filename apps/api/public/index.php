@@ -692,6 +692,106 @@ function notebook_templates(): array
                 "Publishing Checklist\n\n- [ ] Draft complete\n- [ ] Review complete\n- [ ] Assets ready\n- [ ] Scheduled\n",
             ],
         ],
+        'startup-os' => [
+            'name' => 'Startup Operating System',
+            'notes' => [
+                "Company Overview\n\n## Mission\n\n## Customer\n\n## Problem\n\n## Positioning\n\n## Key Links\n- ",
+                "Weekly Priorities\n\n## Week Of\n\n## Top Priorities\n- [ ] \n- [ ] \n- [ ] \n\n## Blockers\n- \n\n## Decisions Needed\n- ",
+                "Product Roadmap\n\n## Now\n- \n\n## Next\n- \n\n## Later\n- \n\n## Open Questions\n- ",
+                "Metrics\n\n## North Star\n\n## Current Snapshot\n- Revenue: \n- Active users: \n- Conversion: \n- Retention: \n\n## Notes\n",
+                "Investor Updates\n\n## Highlights\n- \n\n## Metrics\n- \n\n## Challenges\n- \n\n## Asks\n- ",
+            ],
+        ],
+        'product-management' => [
+            'name' => 'Product Management',
+            'notes' => [
+                "Product Brief\n\n## Problem\n\n## Audience\n\n## Goals\n\n## Non-goals\n\n## Success Metrics\n",
+                "User Feedback\n\n## Themes\n- \n\n## Quotes\n- \n\n## Requests\n- \n\n## Follow-ups\n- [ ] ",
+                "Feature Specs\n\n## Feature\n\n## User Story\n\n## Requirements\n- \n\n## Edge Cases\n- \n\n## Launch Notes\n",
+                "Release Plan\n\n## Target Date\n\n## Scope\n- \n\n## QA Checklist\n- [ ] \n\n## Rollout\n",
+                "Decision Log\n\n## Decision\n\n## Context\n\n## Options\n- \n\n## Owner\n\n## Date\n",
+            ],
+        ],
+        'sales-pipeline' => [
+            'name' => 'Sales Pipeline',
+            'notes' => [
+                "Leads\n\n## New Leads\n- Company - contact - next step\n\n## Qualified\n- \n\n## Not Now\n- ",
+                "Discovery Calls\n\n## Account\n\n## Pain\n\n## Budget\n\n## Timeline\n\n## Next Step\n- [ ] ",
+                "Objections\n\n## Objection\n\n## Response\n\n## Proof Needed\n\n## Follow-up\n- [ ] ",
+                "Follow-ups\n\n## Today\n- [ ] \n\n## This Week\n- [ ] \n\n## Waiting On\n- ",
+                "Closed Won and Lost Notes\n\n## Account\n\n## Outcome\n\n## Why\n\n## Lessons\n\n## Next Opportunity\n",
+            ],
+        ],
+        'hiring-pipeline' => [
+            'name' => 'Hiring Pipeline',
+            'notes' => [
+                "Role Brief\n\n## Role\n\n## Outcomes\n\n## Must Have\n- \n\n## Nice to Have\n- \n\n## Interview Loop\n",
+                "Candidate Notes\n\n## Candidate\n\n## Source\n\n## Strengths\n- \n\n## Concerns\n- \n\n## Next Step\n",
+                "Interview Questions\n\n## Screen\n- \n\n## Technical\n- \n\n## Values\n- \n\n## Closing\n- ",
+                "Scorecard\n\n## Candidate\n\n## Skills\n\n## Communication\n\n## Ownership\n\n## Recommendation\n",
+                "Offer Process\n\n## Candidate\n\n## Compensation\n\n## Approvals\n- [ ] \n\n## Start Date\n",
+            ],
+        ],
+        'learning-notebook' => [
+            'name' => 'Learning Notebook',
+            'notes' => [
+                "Study Plan\n\n## Topic\n\n## Goal\n\n## Schedule\n- \n\n## Milestones\n- [ ] ",
+                "Reading Notes\n\n## Source\n\n## Key Ideas\n- \n\n## Questions\n- \n\n## Actions\n- [ ] ",
+                "Concepts\n\n## Concept\n\n## Explanation\n\n## Example\n\n## Related Ideas\n- ",
+                "Practice Log\n\n## Date\n\n## Exercise\n\n## Result\n\n## Mistakes\n\n## Next Practice\n",
+                "Summary\n\n## What I Learned\n\n## What Still Feels Fuzzy\n\n## Next Steps\n- [ ] ",
+            ],
+        ],
+        'personal-knowledge-base' => [
+            'name' => 'Personal Knowledge Base',
+            'notes' => [
+                "Inbox\n\n- \n\n## To Process\n- [ ] ",
+                "People\n\n## Name\n\n## Context\n\n## Last Contact\n\n## Notes\n\n## Follow-up\n- [ ] ",
+                "Ideas\n\n## Idea\n\n## Why It Matters\n\n## Next Step\n- [ ] ",
+                "References\n\n## Topic\n\n## Links\n- \n\n## Notes\n",
+                "Weekly Review\n\n## Wins\n- \n\n## Lessons\n- \n\n## Carry Forward\n- [ ] ",
+            ],
+        ],
+        'support-desk' => [
+            'name' => 'Support Desk',
+            'notes' => [
+                "Open Issues\n\n## Critical\n- \n\n## Normal\n- \n\n## Waiting On Customer\n- ",
+                "Customer Reports\n\n## Customer\n\n## Report\n\n## Environment\n\n## Impact\n\n## Next Step\n- [ ] ",
+                "Bug Reproduction\n\n## Steps\n1. \n2. \n3. \n\n## Expected\n\n## Actual\n\n## Evidence\n",
+                "Resolutions\n\n## Issue\n\n## Root Cause\n\n## Fix\n\n## Customer Reply\n",
+                "FAQ Drafts\n\n## Question\n\n## Short Answer\n\n## Detailed Answer\n\n## Links\n- ",
+            ],
+        ],
+        'content-studio' => [
+            'name' => 'Content Studio',
+            'notes' => [
+                "Content Calendar\n\n## This Week\n- \n\n## Next Week\n- \n\n## Scheduled\n- ",
+                "Ideas\n\n## Backlog\n- \n\n## Strong Hooks\n- \n\n## Research Needed\n- ",
+                "Drafts\n\n## Title\n\n## Hook\n\n## Outline\n- \n\n## Draft Notes\n",
+                "Distribution Checklist\n\n- [ ] Publish\n- [ ] Email\n- [ ] Social\n- [ ] Repurpose\n- [ ] Archive assets\n",
+                "Performance Notes\n\n## Piece\n\n## Views\n\n## Engagement\n\n## Lessons\n\n## Next Iteration\n",
+            ],
+        ],
+        'agency-client-hub' => [
+            'name' => 'Agency Client Hub',
+            'notes' => [
+                "Client Brief\n\n## Client\n\n## Goals\n\n## Audience\n\n## Constraints\n\n## Success Criteria\n",
+                "Deliverables\n\n## Active\n- [ ] \n\n## Waiting Approval\n- \n\n## Delivered\n- ",
+                "Meeting Notes\n\n## Date\n\n## Attendees\n\n## Decisions\n- \n\n## Action Items\n- [ ] ",
+                "Approvals\n\n## Item\n\n## Sent Date\n\n## Status\n\n## Feedback\n\n## Next Step\n- [ ] ",
+                "Billing Notes\n\n## Scope\n\n## Invoices\n- \n\n## Change Requests\n- \n\n## Renewal Notes\n",
+            ],
+        ],
+        'dev-journal' => [
+            'name' => 'Dev Journal',
+            'notes' => [
+                "Architecture Notes\n\n## System\n\n## Components\n- \n\n## Tradeoffs\n\n## Open Questions\n",
+                "Bugs\n\n## Bug\n\n## Reproduction\n\n## Cause\n\n## Fix\n\n## Follow-up\n- [ ] ",
+                "Commands\n\n## Local\n```\n\n```\n\n## Server\n```\n\n```\n",
+                "Deploy Notes\n\n## Version\n\n## Changes\n- \n\n## Checks\n- [ ] Build\n- [ ] Health check\n- [ ] Rollback ready\n",
+                "Postmortems\n\n## Incident\n\n## Impact\n\n## Timeline\n\n## Root Cause\n\n## Prevention\n- [ ] ",
+            ],
+        ],
     ];
 }
 
