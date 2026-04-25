@@ -369,12 +369,117 @@ textarea:focus-visible {
 .topbar {
   height: 58px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px 38px;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 560px) 38px 38px;
   align-items: center;
   gap: 9px;
   padding: 0 22px;
   border-bottom: 1px solid var(--line-soft);
   background: rgba(251, 250, 246, 0.94);
+}
+
+.globalSearch {
+  position: relative;
+  min-width: 0;
+  height: 38px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+}
+
+.globalSearch:focus-within {
+  border-color: #b9c2bb;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(24, 32, 28, 0.08);
+}
+
+.globalSearch input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.globalSearch > span {
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 3px 6px;
+  color: var(--faint);
+  background: #f7f7f2;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.globalSearchResults {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 4px;
+  max-height: min(420px, calc(100svh - 92px));
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 26px 70px rgba(24, 32, 28, 0.16);
+}
+
+.searchResultHeader {
+  padding: 5px 7px 7px;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.globalSearchResults button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+}
+
+.globalSearchResults button:hover {
+  background: #f5f6f1;
+}
+
+.globalSearchResults button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 750;
+}
+
+.globalSearchResults button small {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptySearch {
+  margin: 0;
+  padding: 16px 8px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .iconButton {
@@ -687,7 +792,7 @@ textarea:focus-visible {
 .notebookRowActive {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
   align-items: center;
   gap: 4px;
   color: var(--ink-soft);
@@ -738,6 +843,37 @@ textarea:focus-visible {
 .rowIconButton:hover {
   background: var(--danger-wash);
   color: var(--danger);
+}
+
+.renameNotebookForm {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px 30px;
+  gap: 6px;
+  padding: 6px;
+}
+
+.renameNotebookForm input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 9px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.renameNotebookForm button {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink-soft);
+}
+
+.renameNotebookForm button:hover {
+  border-color: #b8c1bb;
+  color: var(--ink);
 }
 
 .inlineConfirm {
@@ -1042,7 +1178,16 @@ small {
   }
 
   .topbar {
-    height: 50px;
+    height: auto;
+    grid-template-columns: minmax(0, 1fr) 38px 38px;
+    row-gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .globalSearch {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-bottom: 8px;
   }
 
   .mobileSwitcher {
@@ -1080,7 +1225,7 @@ small {
   }
 
   .shell {
-    height: calc(100svh - 118px);
+    height: calc(100svh - 164px);
     min-height: 0;
     grid-template-columns: 1fr;
   }

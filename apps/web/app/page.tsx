@@ -3,8 +3,10 @@
 import {
   ArrowLeft,
   BookOpen,
+  Check,
   CheckCircle2,
   Clock3,
+  Edit3,
   FileText,
   KeyRound,
   LogOut,
@@ -15,8 +17,9 @@ import {
   Settings,
   ShieldCheck,
   Trash2,
+  X,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type User = { id: number; name: string; email: string };
 type Workspace = { id: number; name: string };
@@ -28,6 +31,8 @@ type Note = {
   updated_at?: string;
 };
 type MailStatus = { sent: boolean; driver: string; message?: string };
+type SearchNote = Note & { notebook_name: string };
+type SearchResults = { notebooks: Notebook[]; notes: SearchNote[] };
 
 const API =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -89,10 +94,19 @@ export default function Home() {
   const [mobilePane, setMobilePane] = useState<"notebooks" | "notes" | "editor">("editor");
   const [pendingDelete, setPendingDelete] = useState(false);
   const [pendingNotebookDelete, setPendingNotebookDelete] = useState<number | null>(null);
+  const [renamingNotebookId, setRenamingNotebookId] = useState<number | null>(null);
+  const [renameNotebookValue, setRenameNotebookValue] = useState("");
+  const [globalQuery, setGlobalQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+  const [searching, setSearching] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStatus, setPasswordStatus] = useState("");
+  const globalSearchRef = useRef<HTMLInputElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const targetNoteIdRef = useRef<number | null>(null);
 
   const headers = useMemo(
     () => ({
@@ -162,8 +176,12 @@ export default function Home() {
   const loadNotes = useCallback(
     async (id: number) => {
       const data = await api<{ notes: Note[] }>(`/notebooks/${id}/notes`);
+      const targetNoteId = targetNoteIdRef.current;
       setNotes(data.notes);
-      setActiveNote(data.notes[0] ?? null);
+      setActiveNote(
+        targetNoteId ? data.notes.find((note) => note.id === targetNoteId) ?? data.notes[0] ?? null : data.notes[0] ?? null,
+      );
+      targetNoteIdRef.current = null;
     },
     [api],
   );
@@ -253,10 +271,19 @@ export default function Home() {
         if (activeNotebook) createNote();
       }
 
+      if (command && key === "k") {
+        event.preventDefault();
+        setActiveView("workspace");
+        window.setTimeout(() => globalSearchRef.current?.focus(), 0);
+      }
+
       if (event.key === "Escape") {
         setActiveView("workspace");
         setPendingDelete(false);
         setPendingNotebookDelete(null);
+        setRenamingNotebookId(null);
+        setGlobalQuery("");
+        setSearchResults(null);
       }
     }
 
@@ -329,6 +356,7 @@ export default function Home() {
       setActiveNote(note);
       setMobilePane("editor");
       setStatus("Note created");
+      window.setTimeout(() => titleInputRef.current?.focus(), 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create note");
     }
@@ -369,6 +397,33 @@ export default function Home() {
     }
   }
 
+  function startNotebookRename(notebook: Notebook) {
+    setPendingNotebookDelete(null);
+    setRenamingNotebookId(notebook.id);
+    setRenameNotebookValue(notebook.name);
+  }
+
+  async function renameNotebook(id: number) {
+    const name = renameNotebookValue.trim();
+    if (!name) return;
+
+    try {
+      const notebook = await api<Notebook>(`/notebooks/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name }),
+      });
+      setNotebooks((current) =>
+        current.map((item) => (item.id === notebook.id ? notebook : item)),
+      );
+      setActiveNotebook((current) => (current?.id === notebook.id ? notebook : current));
+      setRenamingNotebookId(null);
+      setRenameNotebookValue("");
+      setStatus("Notebook renamed");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to rename notebook");
+    }
+  }
+
   async function sendTestEmail() {
     try {
       setStatus("Sending test email...");
@@ -406,6 +461,69 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Unable to update password");
     }
   }
+
+  async function openSearchNote(note: SearchNote) {
+    try {
+      const notebook =
+        notebooks.find((item) => item.id === note.notebook_id) ??
+        {
+          id: note.notebook_id,
+          workspace_id: workspace?.id ?? 0,
+          name: note.notebook_name,
+        };
+      setActiveView("workspace");
+      setMobilePane("editor");
+      setGlobalQuery("");
+      setSearchResults(null);
+
+      if (activeNotebook?.id === note.notebook_id) {
+        setActiveNote(notes.find((item) => item.id === note.id) ?? note);
+        return;
+      }
+
+      targetNoteIdRef.current = note.id;
+      setActiveNotebook(notebook);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to open search result");
+    }
+  }
+
+  function openSearchNotebook(notebook: Notebook) {
+    setActiveView("workspace");
+    setActiveNotebook(notebook);
+    setMobilePane("notes");
+    setGlobalQuery("");
+    setSearchResults(null);
+  }
+
+  useEffect(() => {
+    const query = globalQuery.trim();
+    if (!token || query.length < 2) {
+      setSearchResults(null);
+      setSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      api<SearchResults>(`/search?q=${encodeURIComponent(query)}`)
+        .then((results) => {
+          if (!cancelled) setSearchResults(results);
+        })
+        .catch((err) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : "Search failed");
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [api, globalQuery, token]);
 
   const filteredNotebooks = notebooks.filter((notebook) =>
     notebook.name.toLowerCase().includes(notebookQuery.trim().toLowerCase()),
@@ -545,6 +663,42 @@ export default function Home() {
             <h1 className="appTitle">Obscribe</h1>
             <p className="subline">{workspace?.name ?? "Workspace"}</p>
           </div>
+        </div>
+        <div className="globalSearch">
+          <Search size={15} strokeWidth={2} />
+          <input
+            ref={globalSearchRef}
+            value={globalQuery}
+            onChange={(e) => setGlobalQuery(e.target.value)}
+            placeholder="Search everything"
+            aria-label="Search everything"
+          />
+          <span>Ctrl K</span>
+          {globalQuery.trim().length >= 2 && (
+            <div className="globalSearchResults">
+              <div className="searchResultHeader">
+                <span>{searching ? "Searching..." : "Results"}</span>
+              </div>
+              {searchResults?.notebooks.map((notebook) => (
+                <button key={`notebook-${notebook.id}`} onClick={() => openSearchNotebook(notebook)} type="button">
+                  <BookOpen size={15} strokeWidth={2} />
+                  <span>{notebook.name}</span>
+                  <small>Notebook</small>
+                </button>
+              ))}
+              {searchResults?.notes.map((note) => (
+                <button key={`note-${note.id}`} onClick={() => openSearchNote(note)} type="button">
+                  <FileText size={15} strokeWidth={2} />
+                  <span>{noteTitle(note)}</span>
+                  <small>{note.notebook_name}</small>
+                </button>
+              ))}
+              {!searching &&
+                searchResults &&
+                !searchResults.notebooks.length &&
+                !searchResults.notes.length && <p className="emptySearch">No matches found.</p>}
+            </div>
+          )}
         </div>
         <button
           onClick={() => setActiveView("settings")}
@@ -710,25 +864,65 @@ export default function Home() {
                     key={notebook.id}
                     className={activeNotebook?.id === notebook.id ? "notebookRowActive" : "notebookRow"}
                   >
-                    <button
-                      onClick={() => {
-                        setActiveNotebook(notebook);
-                        setMobilePane("notes");
-                      }}
-                      className="notebookSelect"
-                      type="button"
-                    >
-                      <span>{notebook.name}</span>
-                    </button>
-                    <button
-                      onClick={() => setPendingNotebookDelete(notebook.id)}
-                      className="rowIconButton"
-                      type="button"
-                      aria-label={`Delete ${notebook.name}`}
-                      title={`Delete ${notebook.name}`}
-                    >
-                      <Trash2 size={14} strokeWidth={2} />
-                    </button>
+                    {renamingNotebookId === notebook.id ? (
+                      <form
+                        className="renameNotebookForm"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          renameNotebook(notebook.id);
+                        }}
+                      >
+                        <input
+                          value={renameNotebookValue}
+                          onChange={(e) => setRenameNotebookValue(e.target.value)}
+                          autoFocus
+                          aria-label={`Rename ${notebook.name}`}
+                        />
+                        <button type="submit" aria-label="Save notebook name">
+                          <Check size={14} strokeWidth={2.4} />
+                        </button>
+                        <button
+                          onClick={() => setRenamingNotebookId(null)}
+                          type="button"
+                          aria-label="Cancel rename"
+                        >
+                          <X size={14} strokeWidth={2.4} />
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setActiveNotebook(notebook);
+                          setMobilePane("notes");
+                        }}
+                        className="notebookSelect"
+                        type="button"
+                      >
+                        <span>{notebook.name}</span>
+                      </button>
+                    )}
+                    {renamingNotebookId !== notebook.id && (
+                      <button
+                        onClick={() => startNotebookRename(notebook)}
+                        className="rowIconButton"
+                        type="button"
+                        aria-label={`Rename ${notebook.name}`}
+                        title={`Rename ${notebook.name}`}
+                      >
+                        <Edit3 size={14} strokeWidth={2} />
+                      </button>
+                    )}
+                    {renamingNotebookId !== notebook.id && (
+                      <button
+                        onClick={() => setPendingNotebookDelete(notebook.id)}
+                        className="rowIconButton"
+                        type="button"
+                        aria-label={`Delete ${notebook.name}`}
+                        title={`Delete ${notebook.name}`}
+                      >
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
+                    )}
                     {pendingNotebookDelete === notebook.id && (
                       <div className="inlineConfirm" role="alert">
                         <p>
@@ -850,12 +1044,20 @@ export default function Home() {
                     </div>
                   )}
                   <input
+                    ref={titleInputRef}
                     className="titleInput"
                     value={noteParts.title}
                     onChange={(e) => updateNoteTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        editorRef.current?.focus();
+                      }
+                    }}
                     placeholder="Untitled"
                   />
                   <textarea
+                    ref={editorRef}
                     className="editor"
                     value={noteParts.body}
                     onChange={(e) => updateNoteBody(e.target.value)}

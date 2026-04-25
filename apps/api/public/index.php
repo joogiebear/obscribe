@@ -572,6 +572,48 @@ try {
         ], $mail['sent'] ? 200 : 422);
     }
 
+    if ($method === 'GET' && $path === '/search') {
+        $query = trim((string) ($_GET['q'] ?? ''));
+        if (strlen($query) < 2) {
+            json_response(['notebooks' => [], 'notes' => []]);
+        }
+
+        $search = '%' . addcslashes($query, "\\%_") . '%';
+
+        $stmt = db()->prepare(
+            'SELECT id, workspace_id, name
+             FROM notebooks
+             WHERE workspace_id = :workspace_id
+               AND name ILIKE :query ESCAPE \'\\\'
+             ORDER BY updated_at DESC, id DESC
+             LIMIT 10',
+        );
+        $stmt->execute([
+            'workspace_id' => $workspaceId,
+            'query' => $search,
+        ]);
+        $notebooks = $stmt->fetchAll();
+
+        $stmt = db()->prepare(
+            'SELECT notes.id, notes.notebook_id, notebooks.name AS notebook_name, notes.content, notes.updated_at
+             FROM notes
+             INNER JOIN notebooks ON notebooks.id = notes.notebook_id
+             WHERE notebooks.workspace_id = :workspace_id
+               AND notes.content ILIKE :query ESCAPE \'\\\'
+             ORDER BY notes.updated_at DESC, notes.id DESC
+             LIMIT 20',
+        );
+        $stmt->execute([
+            'workspace_id' => $workspaceId,
+            'query' => $search,
+        ]);
+
+        json_response([
+            'notebooks' => $notebooks,
+            'notes' => $stmt->fetchAll(),
+        ]);
+    }
+
     if ($method === 'GET' && $path === '/notebooks') {
         $stmt = db()->prepare(
             'SELECT id, workspace_id, name
