@@ -144,14 +144,13 @@ prompt_value() {
   printf '%s' "${value:-$default}"
 }
 
-prompt_secret() {
+prompt_password() {
   local prompt="$1"
   local default="$2"
   local value=""
 
   if [ -t 0 ]; then
-    read -r -s -p "${prompt}" value
-    printf '\n'
+    read -r -p "${prompt}" value
   fi
 
   printf '%s' "${value:-$default}"
@@ -274,7 +273,7 @@ configure_smtp() {
   smtp_port="${OBSCRIBE_SMTP_PORT:-$(prompt_value "SMTP port" "$(get_env_value MAIL_PORT)")}"
   smtp_port="${smtp_port:-587}"
   smtp_username="${OBSCRIBE_SMTP_USERNAME:-$(prompt_value "SMTP username" "$(get_env_value MAIL_USERNAME)")}"
-  smtp_password="${OBSCRIBE_SMTP_PASSWORD:-$(prompt_secret "SMTP password: " "$(get_env_value MAIL_PASSWORD)")}"
+  smtp_password="${OBSCRIBE_SMTP_PASSWORD:-$(prompt_password "SMTP password (visible while typing): " "$(get_env_value MAIL_PASSWORD)")}"
   if [ -z "${smtp_password}" ]; then
     echo "SMTP password cannot be empty. Re-run SMTP setup after confirming the mailbox password."
     exit 1
@@ -295,7 +294,8 @@ configure_smtp() {
   set_env_value "MAIL_FROM_ADDRESS" "${mail_from}"
   set_env_value "MAIL_FROM_NAME" "${mail_name}"
 
-  echo "SMTP settings saved. New registrations will send a welcome email."
+  echo "SMTP settings saved with a password length of ${#smtp_password} characters."
+  echo "New registrations will send a welcome email."
 }
 
 ensure_docker
