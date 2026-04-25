@@ -1,5 +1,19 @@
 "use client";
 
+import {
+  BookOpen,
+  CheckCircle2,
+  Clock3,
+  FileText,
+  LogOut,
+  Mail,
+  Plus,
+  Save,
+  Search,
+  Settings,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type User = { id: number; name: string; email: string };
@@ -33,7 +47,7 @@ function noteTitle(note: Note) {
 
 function notePreview(note: Note) {
   const body = splitNoteContent(note.content || "").body.trim();
-  return body || "No additional text";
+  return body || "Blank note";
 }
 
 function compactDate(value?: string) {
@@ -69,6 +83,8 @@ export default function Home() {
   const [noteQuery, setNoteQuery] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [mobilePane, setMobilePane] = useState<"notebooks" | "notes" | "editor">("editor");
+  const [pendingDelete, setPendingDelete] = useState(false);
 
   const headers = useMemo(
     () => ({
@@ -198,6 +214,7 @@ export default function Home() {
   useEffect(() => {
     setContent(activeNote?.content || "");
     setLastSavedAt(null);
+    setPendingDelete(false);
   }, [activeNote?.id, activeNote?.content]);
 
   useEffect(() => {
@@ -209,6 +226,31 @@ export default function Home() {
 
     return () => window.clearTimeout(timer);
   }, [activeNote, content, saveNote]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const key = event.key.toLowerCase();
+      const command = event.metaKey || event.ctrlKey;
+
+      if (command && key === "s") {
+        event.preventDefault();
+        if (activeNote) saveNote(content);
+      }
+
+      if (command && key === "n") {
+        event.preventDefault();
+        if (activeNotebook) createNote();
+      }
+
+      if (event.key === "Escape") {
+        setShowSettings(false);
+        setPendingDelete(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeNote, activeNotebook, content, createNote, saveNote]);
 
   async function auth(e: FormEvent) {
     e.preventDefault();
@@ -251,6 +293,7 @@ export default function Home() {
       });
       setNotebookName("");
       setActiveNotebook(notebook);
+      setMobilePane("notes");
       await loadNotebooks();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create notebook");
@@ -271,6 +314,7 @@ export default function Home() {
       });
       setNotes((current) => [note, ...current]);
       setActiveNote(note);
+      setMobilePane("editor");
       setStatus("Note created");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create note");
@@ -279,13 +323,13 @@ export default function Home() {
 
   async function deleteActiveNote() {
     if (!activeNote) return;
-    if (!window.confirm("Delete this note?")) return;
 
     try {
       await api<{ deleted: boolean }>(`/notes/${activeNote.id}`, { method: "DELETE" });
       const remaining = notes.filter((note) => note.id !== activeNote.id);
       setNotes(remaining);
       setActiveNote(remaining[0] ?? null);
+      setPendingDelete(false);
       setStatus("Note deleted");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete note");
@@ -314,6 +358,9 @@ export default function Home() {
   });
   const noteParts = splitNoteContent(content);
   const isDirty = activeNote ? (activeNote.content || "") !== content : false;
+  const bodyWordCount = noteParts.body.trim() ? noteParts.body.trim().split(/\s+/).length : 0;
+  const noteCountLabel = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
+  const notebookCountLabel = `${notebooks.length} ${notebooks.length === 1 ? "notebook" : "notebooks"}`;
   const displayStatus =
     status === "Saved" && lastSavedAt
       ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
@@ -332,14 +379,36 @@ export default function Home() {
   if (!token) {
     return (
       <main className="loginPage">
+        <section className="loginStory" aria-label="Obscribe overview">
+          <div className="heroMark">O</div>
+          <p className="kicker lightKicker">Self-hosted notes</p>
+          <h1 className="heroWord">Obscribe</h1>
+          <p className="heroCopy">
+            A private writing workspace for notebooks, drafts, and project memory.
+          </p>
+          <div className="trustList">
+            <span>
+              <ShieldCheck size={16} strokeWidth={2} />
+              Your server
+            </span>
+            <span>
+              <Clock3 size={16} strokeWidth={2} />
+              Autosave
+            </span>
+            <span>
+              <CheckCircle2 size={16} strokeWidth={2} />
+              SMTP ready
+            </span>
+          </div>
+        </section>
         <section className="loginCard" aria-labelledby="auth-title">
           <div className="mark">O</div>
           <p className="kicker">Private notebook workspace</p>
-          <h1 id="auth-title" className="loginTitle">
-            Obscribe
-          </h1>
+          <h2 id="auth-title" className="loginTitle">
+            {mode === "login" ? "Welcome back" : "Create your account"}
+          </h2>
           <p className="muted">
-            Sign in to continue writing, organizing, and syncing notebook drafts.
+            Continue to your notes, notebooks, and self-hosted workspace checks.
           </p>
 
           <div className="tabs" role="tablist" aria-label="Authentication mode">
@@ -348,14 +417,14 @@ export default function Home() {
               onClick={() => setMode("login")}
               type="button"
             >
-              Login
+              Sign in
             </button>
             <button
               className={mode === "register" ? "tabActive" : "tab"}
               onClick={() => setMode("register")}
               type="button"
             >
-              Register
+              Create account
             </button>
           </div>
 
@@ -363,34 +432,43 @@ export default function Home() {
 
           <form onSubmit={auth} className="form">
             {mode === "register" && (
+              <label className="fieldGroup">
+                <span className="fieldLabel">Name</span>
+                <input
+                  className="input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Jane Doe"
+                  autoComplete="name"
+                  required
+                />
+              </label>
+            )}
+            <label className="fieldGroup">
+              <span className="fieldLabel">Email</span>
               <input
                 className="input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Name"
-                autoComplete="name"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                type="email"
+                autoComplete="email"
                 required
               />
-            )}
-            <input
-              className="input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              type="email"
-              autoComplete="email"
-              required
-            />
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              required
-            />
-            <button className="primary">{mode === "login" ? "Login" : "Create account"}</button>
+            </label>
+            <label className="fieldGroup">
+              <span className="fieldLabel">Password</span>
+              <input
+                className="input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                required
+              />
+            </label>
+            <button className="primary">{mode === "login" ? "Sign in" : "Create account"}</button>
           </form>
         </section>
       </main>
@@ -404,17 +482,20 @@ export default function Home() {
           <div className="logo">O</div>
           <div>
             <h1 className="appTitle">Obscribe</h1>
-            <p className="subline">
-              {workspace?.name ?? "Workspace"} / {user?.email ?? "Loading account"}
-            </p>
+            <p className="subline">{workspace?.name ?? "Workspace"}</p>
           </div>
         </div>
-        <div className="status">{displayStatus}</div>
-        <button onClick={() => setShowSettings((value) => !value)} className="secondary" type="button">
-          Settings
+        <button
+          onClick={() => setShowSettings((value) => !value)}
+          className="iconButton"
+          type="button"
+          aria-label="Settings"
+          title="Settings"
+        >
+          <Settings size={17} strokeWidth={2} />
         </button>
-        <button onClick={logout} className="secondary" type="button">
-          Logout
+        <button onClick={logout} className="iconButton" type="button" aria-label="Logout" title="Logout">
+          <LogOut size={17} strokeWidth={2} />
         </button>
       </header>
 
@@ -424,20 +505,50 @@ export default function Home() {
           <div>
             <p className="kicker">Admin</p>
             <h2 className="settingsTitle">Self-host checks</h2>
+            <p className="settingsMeta">{user?.email ?? "Loading account"}</p>
           </div>
           <button onClick={sendTestEmail} className="secondary" type="button">
+            <Mail size={16} strokeWidth={2} />
             Send test email
           </button>
         </section>
       )}
 
-      <section className="shell">
+      <nav className="mobileSwitcher" aria-label="Workspace panels">
+        <button
+          className={mobilePane === "notebooks" ? "mobilePaneActive" : "mobilePaneButton"}
+          onClick={() => setMobilePane("notebooks")}
+          type="button"
+        >
+          <BookOpen size={15} strokeWidth={2.2} />
+          Notebooks
+        </button>
+        <button
+          className={mobilePane === "notes" ? "mobilePaneActive" : "mobilePaneButton"}
+          onClick={() => setMobilePane("notes")}
+          type="button"
+        >
+          <FileText size={15} strokeWidth={2.2} />
+          Notes
+        </button>
+        <button
+          className={mobilePane === "editor" ? "mobilePaneActive" : "mobilePaneButton"}
+          onClick={() => setMobilePane("editor")}
+          type="button"
+        >
+          <Save size={15} strokeWidth={2.2} />
+          Editor
+        </button>
+      </nav>
+
+      <section className={`shell pane-${mobilePane}`}>
         <aside className="rail" aria-label="Notebooks">
           <div className="panelHeader">
             <div>
               <p className="kicker">Workspace</p>
               <h2 className="panelTitle">Notebooks</h2>
             </div>
+            <span className="countPill">{notebookCountLabel}</span>
           </div>
 
           <form onSubmit={createNotebook} className="createRow">
@@ -448,21 +559,27 @@ export default function Home() {
               placeholder="Notebook name"
             />
             <button className="addButton" aria-label="Create notebook" disabled={!notebookName.trim()}>
-              +
+              <Plus size={19} strokeWidth={2.4} />
             </button>
           </form>
-          <input
-            className="searchInput"
-            value={notebookQuery}
-            onChange={(e) => setNotebookQuery(e.target.value)}
-            placeholder="Search notebooks"
-          />
+          <label className="searchWrap">
+            <Search size={15} strokeWidth={2} />
+            <input
+              className="searchInput"
+              value={notebookQuery}
+              onChange={(e) => setNotebookQuery(e.target.value)}
+              placeholder="Search notebooks"
+            />
+          </label>
 
           <div className="list">
             {filteredNotebooks.map((notebook) => (
               <button
                 key={notebook.id}
-                onClick={() => setActiveNotebook(notebook)}
+                onClick={() => {
+                  setActiveNotebook(notebook);
+                  setMobilePane("notes");
+                }}
                 className={activeNotebook?.id === notebook.id ? "activeItem" : "item"}
                 type="button"
               >
@@ -484,7 +601,8 @@ export default function Home() {
           <div className="panelHeader">
             <div>
               <p className="kicker">Current notebook</p>
-              <h2 className="panelTitle">Notes</h2>
+              <h2 className="panelTitle">{activeNotebook?.name ?? "Notes"}</h2>
+              <p className="railMeta">{noteCountLabel}</p>
             </div>
             <button
               onClick={createNote}
@@ -492,23 +610,30 @@ export default function Home() {
               disabled={!activeNotebook}
               type="button"
             >
+              <Plus size={16} strokeWidth={2.4} />
               New
             </button>
           </div>
-          <input
-            className="searchInput"
-            value={noteQuery}
-            onChange={(e) => setNoteQuery(e.target.value)}
-            placeholder="Search notes"
-            disabled={!notes.length}
-          />
+          <label className="searchWrap lightSearch">
+            <Search size={15} strokeWidth={2} />
+            <input
+              className="searchInput"
+              value={noteQuery}
+              onChange={(e) => setNoteQuery(e.target.value)}
+              placeholder="Search notes"
+              disabled={!notes.length}
+            />
+          </label>
 
           <div className="list">
             {filteredNotes.map((note) => {
               return (
                 <button
                   key={note.id}
-                  onClick={() => setActiveNote(note)}
+                  onClick={() => {
+                    setActiveNote(note);
+                    setMobilePane("editor");
+                  }}
                   className={activeNote?.id === note.id ? "noteActive" : "noteItem"}
                   type="button"
                 >
@@ -532,20 +657,37 @@ export default function Home() {
             <>
               <div className="editorTop">
                 <div>
-                  <p className="kicker">Editor</p>
+                  <p className="kicker">{activeNotebook?.name ?? "Editor"}</p>
                   <h2 className="editorTitle">
                     {noteParts.title.trim() || "Untitled"}
                   </h2>
+                  <p className="editorMeta">
+                    <Clock3 size={14} strokeWidth={2} />
+                    {displayStatus}
+                  </p>
                 </div>
                 <div className="editorActions">
-                  <button onClick={deleteActiveNote} className="dangerButton" type="button">
+                  <button onClick={() => setPendingDelete(true)} className="dangerButton" type="button">
+                    <Trash2 size={15} strokeWidth={2} />
                     Delete
                   </button>
                   <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button">
+                    <Save size={15} strokeWidth={2} />
                     Save now
                   </button>
                 </div>
               </div>
+              {pendingDelete && (
+                <div className="deleteConfirm" role="alert">
+                  <span>Delete this note permanently?</span>
+                  <button className="secondary" onClick={() => setPendingDelete(false)} type="button">
+                    Cancel
+                  </button>
+                  <button className="dangerButton" onClick={deleteActiveNote} type="button">
+                    Delete
+                  </button>
+                </div>
+              )}
               <input
                 className="titleInput"
                 value={noteParts.title}
@@ -556,8 +698,13 @@ export default function Home() {
                 className="editor"
                 value={noteParts.body}
                 onChange={(e) => updateNoteBody(e.target.value)}
-                placeholder="Write, paste, or draft here..."
+                placeholder="Start writing..."
               />
+              <footer className="editorFooter" aria-label="Note details">
+                <span>{bodyWordCount} {bodyWordCount === 1 ? "word" : "words"}</span>
+                <span>{noteParts.body.length} characters</span>
+                <span>{displayStatus}</span>
+              </footer>
             </>
           ) : (
             <div className="emptyState">
