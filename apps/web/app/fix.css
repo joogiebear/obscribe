@@ -1,0 +1,3 @@
+.shell{display:grid;grid-template-columns:260px 280px 1fr;gap:16px}
+.shell>*{min-width:0}
+.rail,.notesRail,.editorPanel{min-width:0;overflow:auto}
