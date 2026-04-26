@@ -2848,14 +2848,9 @@ export default function Home() {
                   </div>
                 ))}
                 {!notebooks.length && (
-                  <div className="emptyStack">
-                    <button className="emptyAction" onClick={openTemplateDialog} type="button">
-                      Browse templates
-                    </button>
-                    <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
-                      Create a blank notebook
-                    </button>
-                  </div>
+                  <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
+                    Create a blank notebook
+                  </button>
                 )}
                 {!!notebooks.length && !filteredNotebooks.length && (
                   <p className="emptySmall">No notebooks match that search.</p>
