@@ -207,6 +207,15 @@ get_env_value() {
   grep "^${key}=" "${ENV_FILE}" | tail -n 1 | cut -d= -f2- || true
 }
 
+ensure_env_value() {
+  local key="$1"
+  local default="$2"
+
+  if [ -z "$(get_env_value "${key}")" ]; then
+    set_env_value "${key}" "${default}"
+  fi
+}
+
 sanitize_env_file() {
   local tmp_file
   local backup_file
@@ -407,6 +416,21 @@ else
 fi
 
 sanitize_env_file
+mkdir -p "${ROOT_DIR}/backups"
+set_env_value "APP_VERSION" "$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+
+if [ -n "${OBSCRIBE_REGISTRATION_MODE:-}" ]; then
+  set_env_value "REGISTRATION_MODE" "${OBSCRIBE_REGISTRATION_MODE}"
+else
+  ensure_env_value "REGISTRATION_MODE" "open"
+fi
+
+if [ -n "${OBSCRIBE_EMAIL_VERIFICATION_REQUIRED:-}" ]; then
+  set_env_value "EMAIL_VERIFICATION_REQUIRED" "${OBSCRIBE_EMAIL_VERIFICATION_REQUIRED}"
+else
+  ensure_env_value "EMAIL_VERIFICATION_REQUIRED" "false"
+fi
+
 configure_admin_emails
 configure_smtp
 sanitize_env_file
@@ -418,6 +442,13 @@ echo "Waiting for the API to become healthy..."
 for attempt in {1..30}; do
   if docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T api php -r 'echo file_get_contents("http://127.0.0.1:8000/api/health");' >/dev/null 2>&1; then
     echo "Obscribe is running."
+    echo ""
+    echo "Post-install checklist:"
+    echo "1. Open $(get_env_value APP_URL)"
+    echo "2. Register with an email listed in ADMIN_EMAILS: $(get_env_value ADMIN_EMAILS)"
+    echo "3. Open Settings, send a test email, and confirm backup status"
+    echo "4. Run: bash scripts/backup.sh"
+    echo "5. Restore docs: docs/self-host-operations.md"
     docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps
     exit 0
   fi

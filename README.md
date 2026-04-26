@@ -49,6 +49,8 @@ For a non-interactive install:
 OBSCRIBE_DOMAIN=notes.example.com \
 OBSCRIBE_ACME_EMAIL=admin@example.com \
 OBSCRIBE_ADMIN_EMAILS=owner@example.com \
+OBSCRIBE_REGISTRATION_MODE=open \
+OBSCRIBE_EMAIL_VERIFICATION_REQUIRED=false \
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/joogiebear/obscribe/main/scripts/deploy.sh)"
 ```
 
@@ -62,6 +64,10 @@ OBSCRIBE_DOMAIN=notes.example.com OBSCRIBE_ACME_EMAIL=admin@example.com \
 The SSL email is only used by Caddy/Let's Encrypt for certificate notices. App email is separate and currently defaults to log-only delivery with `MAIL_FROM_ADDRESS=no-reply@your-domain`.
 
 The admin email controls owner-only settings inside the app, including email delivery tests and self-host health checks. Register with an email listed in `ADMIN_EMAILS` to unlock those controls. Multiple owner emails can be comma-separated.
+
+Launch access can be controlled with `REGISTRATION_MODE=open`, `REGISTRATION_MODE=invite`, or `REGISTRATION_MODE=closed`. Hosted early access should usually use `invite` with `EMAIL_VERIFICATION_REQUIRED=true`. Self-hosted installs default to open registration and optional verification so the first owner can get in quickly.
+
+Admins can manage users, create invite codes, resend verification links, send password reset links, disable users, view health checks, and download the latest backup from the Settings page.
 
 To configure SMTP during an existing install:
 
@@ -102,6 +108,8 @@ MAIL_PASSWORD=your-password
 MAIL_ENCRYPTION=tls
 MAIL_FROM_ADDRESS=no-reply@example.com
 MAIL_FROM_NAME=Obscribe
+REGISTRATION_MODE=invite
+EMAIL_VERIFICATION_REQUIRED=true
 ```
 
 Then rerun:
@@ -152,6 +160,7 @@ Use `scripts/release.sh` for normal updates because it creates a pre-release bac
 Backups include a PostgreSQL dump, object-storage volume data when present, Redis persistence when present, Caddy certificate/config volumes, a copy of `.env`, and a small service inventory. The restore command asks for explicit confirmation before replacing the database. Support bundles redact secrets before saving environment details.
 
 See the full self-host runbook in [docs/self-host-operations.md](docs/self-host-operations.md).
+See hosted launch controls in [docs/launch-readiness.md](docs/launch-readiness.md).
 
 ## SaaS Direction
 

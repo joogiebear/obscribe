@@ -2,6 +2,8 @@
 
 import {
   ArrowLeft,
+  Activity,
+  Archive,
   BookOpen,
   Bold,
   Briefcase,
@@ -10,8 +12,10 @@ import {
   ClipboardList,
   Clock3,
   Code2,
+  Copy,
   Download,
   Edit3,
+  ExternalLink,
   FileSearch,
   FileText,
   Heading1,
@@ -25,6 +29,7 @@ import {
   Minus,
   Moon,
   PenLine,
+  Pin,
   Plus,
   Quote,
   RefreshCcw,
@@ -33,8 +38,11 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Ticket,
   Trash2,
   Upload,
+  UserCheck,
+  UserX,
   Users,
   X,
   type LucideIcon,
@@ -43,9 +51,9 @@ import { FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect,
 
 type AuthMode = "login" | "register" | "forgot" | "reset";
 type ThemeMode = "light" | "dark";
-type User = { id: number; name: string; email: string; is_admin: boolean };
+type User = { id: number; name: string; email: string; is_admin: boolean; email_verified?: boolean; disabled?: boolean };
 type Workspace = { id: number; name: string };
-type Notebook = { id: number; workspace_id: number; name: string };
+type Notebook = { id: number; workspace_id: number; name: string; pinned_at?: string | null };
 type Note = {
   id: number;
   notebook_id: number;
@@ -78,13 +86,45 @@ type NotebookTemplate = {
   icon: LucideIcon;
 };
 type MailStatus = { sent: boolean; driver: string; message?: string };
-type SearchNote = Note & { notebook_name: string };
+type SearchNote = Note & { notebook_name: string; snippet?: string };
 type SearchResults = { notebooks: Notebook[]; notes: SearchNote[] };
 type MarkdownFormat = "heading" | "bold" | "italic" | "link" | "check" | "bullet" | "quote" | "code";
 type AppStatus = {
   status: string;
   counts: { notebooks: number; notes: number };
-  mail: { driver: string; configured: boolean };
+  mail: { driver: string; configured: boolean; host?: string; from?: string };
+};
+type AppConfig = {
+  registration_mode: "open" | "invite" | "closed";
+  email_verification_required: boolean;
+  plans: Array<{ key: string; name: string; price: string; notes: string }>;
+};
+type AdminUser = {
+  id: number;
+  name: string;
+  email: string;
+  email_verified_at?: string | null;
+  disabled_at?: string | null;
+  last_seen_at?: string | null;
+  created_at?: string;
+  workspace_count: number;
+  is_admin: boolean;
+};
+type AdminInvite = {
+  id: number;
+  email?: string | null;
+  max_uses: number;
+  used_count: number;
+  expires_at?: string | null;
+  disabled_at?: string | null;
+  created_at?: string;
+};
+type AdminHealth = {
+  app: { url: string; domain: string; edition: string; version: string; environment: string };
+  launch: { registration_mode: string; email_verification_required: boolean };
+  ssl: { managed_by: string; expected: boolean };
+  mail: { driver: string; configured: boolean; host?: string; from?: string };
+  backup: { available: boolean; name?: string; size?: number; created_at?: string };
 };
 type WorkspaceExport = {
   version: number;
@@ -630,6 +670,33 @@ function compactDate(value?: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "Not recorded";
+  return new Date(value).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatBytes(value?: number) {
+  if (!value) return "0 B";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
+function noteSearchPreview(note: SearchNote) {
+  return (note.snippet || notePreview(note)).replace(/\s+/g, " ").trim() || "Blank note";
+}
+
+function starterSectionContent(key: NoteSectionTemplateKey) {
+  const template = NOTE_SECTION_TEMPLATES.find((item) => item.key === key);
+  return template ? template.content.replace(CURSOR_TOKEN, "") : "";
+}
+
 function markdownBlocks(value: string): MarkdownBlock[] {
   const lines = value.split("\n");
   const blocks: MarkdownBlock[] = [];
@@ -699,6 +766,7 @@ export default function Home() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [token, setToken] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -726,6 +794,15 @@ export default function Home() {
   const [globalQuery, setGlobalQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
   const [searching, setSearching] = useState(false);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [recentNotes, setRecentNotes] = useState<SearchNote[]>([]);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminInvites, setAdminInvites] = useState<AdminInvite[]>([]);
+  const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
+  const [adminEvents, setAdminEvents] = useState<Array<{ event_name: string; total: string }>>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [adminStatus, setAdminStatus] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -871,6 +948,40 @@ export default function Home() {
     }
   }, [api]);
 
+  const loadAppConfig = useCallback(async () => {
+    const data = await api<AppConfig>("/config");
+    setAppConfig(data);
+  }, [api]);
+
+  const loadRecentNotes = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await api<{ notes: SearchNote[] }>("/notes/recent");
+      setRecentNotes(data.notes);
+    } catch {
+      setRecentNotes([]);
+    }
+  }, [api, token]);
+
+  const loadAdminData = useCallback(async () => {
+    if (!user?.is_admin) return;
+    try {
+      const [usersData, invitesData, healthData, eventsData] = await Promise.all([
+        api<{ users: AdminUser[] }>("/admin/users"),
+        api<{ invites: AdminInvite[] }>("/admin/invites"),
+        api<AdminHealth>("/admin/health"),
+        api<{ events: Array<{ event_name: string; total: string }> }>("/admin/analytics"),
+      ]);
+      setAdminUsers(usersData.users);
+      setAdminInvites(invitesData.invites);
+      setAdminHealth(healthData);
+      setAdminEvents(eventsData.events);
+      setAdminStatus("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load admin data");
+    }
+  }, [api, user?.is_admin]);
+
   useEffect(() => {
     const saved = localStorage.getItem("obscribe_token");
     if (saved) setToken(saved);
@@ -887,6 +998,20 @@ export default function Home() {
       setMode("reset");
       window.history.replaceState({}, "", window.location.pathname);
     }
+
+    const urlVerifyToken = params.get("verify_token");
+    if (urlVerifyToken) {
+      api<{ verified: boolean }>("/email/verify", {
+        method: "POST",
+        body: JSON.stringify({ token: urlVerifyToken }),
+      })
+        .then(() => {
+          setResetStatus("Email verified. You can sign in now.");
+          setMode("login");
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : "Unable to verify email"))
+        .finally(() => window.history.replaceState({}, "", window.location.pathname));
+    }
   }, []);
 
   useEffect(() => {
@@ -894,6 +1019,10 @@ export default function Home() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("obscribe_theme", theme);
   }, [theme, themeReady]);
+
+  useEffect(() => {
+    loadAppConfig().catch(() => undefined);
+  }, [loadAppConfig]);
 
   useEffect(() => {
     if (!token) return;
@@ -913,8 +1042,9 @@ export default function Home() {
   useEffect(() => {
     if (token && activeView === "settings" && user?.is_admin) {
       loadAppStatus();
+      loadAdminData();
     }
-  }, [activeView, loadAppStatus, token, user?.is_admin]);
+  }, [activeView, loadAdminData, loadAppStatus, token, user?.is_admin]);
 
   useEffect(() => {
     activeNoteIdRef.current = activeNote?.id ?? null;
@@ -934,7 +1064,8 @@ export default function Home() {
     loadNotes(activeNotebook.id).catch((err) => {
       setError(err instanceof Error ? err.message : "Unable to load notes");
     });
-  }, [activeNotebook, loadNotes]);
+    loadRecentNotes();
+  }, [activeNotebook, loadNotes, loadRecentNotes]);
 
   useEffect(() => {
     setContent(activeNote?.content || "");
@@ -1049,16 +1180,25 @@ export default function Home() {
     e.preventDefault();
 
     try {
-      const body = mode === "register" ? { name, email, password } : { email, password };
+      const body = mode === "register" ? { name, email, password, invite_code: inviteCode } : { email, password };
       const data = await api<{
-        token: string;
-        user: User;
+        token?: string;
+        user?: User;
         workspace: Workspace | null;
         mail?: MailStatus;
+        needs_verification?: boolean;
       }>(
         `/${mode}`,
         { method: "POST", body: JSON.stringify(body) },
       );
+
+      if (data.needs_verification || !data.token || !data.user) {
+        setStatus("Check your email to verify your account.");
+        setResetStatus("Check your email to verify your account, then sign in.");
+        setMode("login");
+        setPassword("");
+        return;
+      }
 
       localStorage.setItem("obscribe_token", data.token);
       setToken(data.token);
@@ -1092,6 +1232,24 @@ export default function Home() {
   async function requestPasswordReset(e: FormEvent) {
     e.preventDefault();
     await sendPasswordReset(resetEmail || email);
+  }
+
+  async function resendVerificationEmail() {
+    const emailValue = (resetEmail || email).trim();
+    if (!emailValue) {
+      setError("Enter your account email first.");
+      return;
+    }
+
+    try {
+      await api<{ sent: boolean }>("/email/resend", {
+        method: "POST",
+        body: JSON.stringify({ email: emailValue }),
+      });
+      setResetStatus("If that account still needs verification, a new link has been sent.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resend verification email");
+    }
   }
 
   async function resetAccountPassword(e: FormEvent) {
@@ -1176,6 +1334,7 @@ export default function Home() {
       setActiveNote(note);
       setMobilePane("editor");
       setStatus(initialContent ? `Template added to ${targetNotebook.name}` : "Note created");
+      await loadRecentNotes();
       window.setTimeout(() => (initialContent ? editorRef.current?.focus() : titleInputRef.current?.focus()), 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create note");
@@ -1220,6 +1379,23 @@ export default function Home() {
       setStatus("Note deleted");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete note");
+    }
+  }
+
+  async function duplicateActiveNote() {
+    if (!activeNote) return;
+
+    try {
+      if (!(await flushActiveNote())) return;
+      const note = await api<Note>(`/notes/${activeNote.id}/duplicate`, { method: "POST" });
+      setNotes((current) => [note, ...current]);
+      setActiveNote(note);
+      setContent(note.content || "");
+      setMobilePane("editor");
+      setStatus("Note duplicated");
+      await loadRecentNotes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to duplicate note");
     }
   }
 
@@ -1268,6 +1444,115 @@ export default function Home() {
       setStatus("Notebook renamed");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to rename notebook");
+    }
+  }
+
+  async function toggleNotebookPin(notebook: Notebook) {
+    try {
+      const updated = await api<Notebook>(`/notebooks/${notebook.id}/pin`, {
+        method: "POST",
+        body: JSON.stringify({ pinned: !notebook.pinned_at }),
+      });
+      setNotebooks((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setActiveNotebook((current) => (current?.id === updated.id ? updated : current));
+      await loadNotebooks();
+      setStatus(updated.pinned_at ? "Notebook pinned" : "Notebook unpinned");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update notebook pin");
+    }
+  }
+
+  async function createInvite(e: FormEvent) {
+    e.preventDefault();
+    try {
+      const data = await api<{ invite: AdminInvite; code: string }>("/admin/invites", {
+        method: "POST",
+        body: JSON.stringify({ email: inviteEmail.trim() || undefined }),
+      });
+      setInviteEmail("");
+      setInviteStatus(`Invite code created: ${data.code}`);
+      await loadAdminData();
+    } catch (err) {
+      setInviteStatus("");
+      setError(err instanceof Error ? err.message : "Unable to create invite");
+    }
+  }
+
+  async function toggleAdminUser(userRecord: AdminUser) {
+    try {
+      await api<{ user: User }>(`/admin/users/${userRecord.id}/disable`, {
+        method: "POST",
+        body: JSON.stringify({ disabled: !userRecord.disabled_at }),
+      });
+      setAdminStatus(userRecord.disabled_at ? "User re-enabled." : "User disabled and signed out.");
+      await loadAdminData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update user");
+    }
+  }
+
+  async function resendUserVerification(userRecord: AdminUser) {
+    try {
+      await api<{ sent: boolean }>(`/admin/users/${userRecord.id}/verification`, { method: "POST" });
+      setAdminStatus(`Verification email sent to ${userRecord.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resend verification");
+    }
+  }
+
+  async function sendUserPasswordReset(userRecord: AdminUser) {
+    try {
+      await api<{ sent: boolean }>(`/admin/users/${userRecord.id}/password-reset`, { method: "POST" });
+      setAdminStatus(`Password reset email sent to ${userRecord.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to send password reset");
+    }
+  }
+
+  async function disableInvite(invite: AdminInvite) {
+    try {
+      await api<{ disabled: boolean }>(`/admin/invites/${invite.id}`, { method: "DELETE" });
+      setInviteStatus("Invite disabled.");
+      await loadAdminData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to disable invite");
+    }
+  }
+
+  async function downloadLatestBackup() {
+    try {
+      const res = await fetch(`${API}/admin/backups/latest`, {
+        headers,
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = JSON.parse(text);
+          if (data?.message) message = String(data.message);
+        } catch {
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = match?.[1] || `obscribe-backup-${timestamp}.tar.gz`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setAdminStatus("Latest backup downloaded.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to download backup");
     }
   }
 
@@ -1696,6 +1981,9 @@ export default function Home() {
 
   if (!token) {
     const showAuthTabs = mode === "login" || mode === "register";
+    const registrationMode = appConfig?.registration_mode ?? "open";
+    const registrationClosed = registrationMode === "closed";
+    const registrationInviteOnly = registrationMode === "invite";
 
     return (
       <main className="loginPage">
@@ -1750,8 +2038,9 @@ export default function Home() {
               </button>
               <button
                 className={mode === "register" ? "tabActive" : "tab"}
-                onClick={() => switchAuthMode("register")}
+                onClick={() => !registrationClosed && switchAuthMode("register")}
                 type="button"
+                disabled={registrationClosed}
               >
                 Create account
               </button>
@@ -1760,6 +2049,21 @@ export default function Home() {
 
           {error && <p className="error">{error}</p>}
           {resetStatus && <p className="successText authStatus">{resetStatus}</p>}
+          {mode === "register" && registrationInviteOnly && (
+            <p className="authNotice">
+              New hosted accounts are invite-only right now. Enter your invite code to continue.
+            </p>
+          )}
+          {mode === "register" && registrationClosed && (
+            <p className="authNotice">
+              Public registration is currently closed. Existing users can still sign in.
+            </p>
+          )}
+          {mode === "register" && appConfig?.email_verification_required && (
+            <p className="authNotice">
+              After signup, Obscribe will send a verification link before the account can sign in.
+            </p>
+          )}
 
           {mode === "forgot" ? (
             <form onSubmit={requestPasswordReset} className="form">
@@ -1837,6 +2141,19 @@ export default function Home() {
                   />
                 </label>
               )}
+              {mode === "register" && registrationInviteOnly && (
+                <label className="fieldGroup">
+                  <span className="fieldLabel">Invite code</span>
+                  <input
+                    className="input"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    placeholder="Invite code"
+                    autoComplete="one-time-code"
+                    required
+                  />
+                </label>
+              )}
               <label className="fieldGroup">
                 <span className="fieldLabel">Email</span>
                 <input
@@ -1875,9 +2192,22 @@ export default function Home() {
                   required
                 />
               </label>
-              <button className="primary">{mode === "login" ? "Sign in" : "Create account"}</button>
+              <button className="primary" disabled={mode === "register" && registrationClosed}>
+                {mode === "login" ? "Sign in" : "Create account"}
+              </button>
+              {mode === "login" && appConfig?.email_verification_required && (
+                <button className="linkButton" onClick={resendVerificationEmail} type="button">
+                  Resend verification email
+                </button>
+              )}
             </form>
           )}
+          <div className="authLinks" aria-label="Legal and support links">
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+            <a href="/support">Support</a>
+            <a href="/contact">Contact</a>
+          </div>
         </section>
       </main>
     );
@@ -1911,14 +2241,20 @@ export default function Home() {
               {searchResults?.notebooks.map((notebook) => (
                 <button key={`notebook-${notebook.id}`} onClick={() => openSearchNotebook(notebook)} type="button">
                   <BookOpen size={15} strokeWidth={2} />
-                  <span>{notebook.name}</span>
-                  <small>Notebook</small>
+                  <span className="searchResultText">
+                    <strong>{notebook.name}</strong>
+                    <small>{notebook.pinned_at ? "Pinned notebook" : "Notebook"}</small>
+                  </span>
+                  <small>{notebook.pinned_at ? "Pinned" : "Open"}</small>
                 </button>
               ))}
               {searchResults?.notes.map((note) => (
                 <button key={`note-${note.id}`} onClick={() => openSearchNote(note)} type="button">
                   <FileText size={15} strokeWidth={2} />
-                  <span>{noteTitle(note)}</span>
+                  <span className="searchResultText">
+                    <strong>{noteTitle(note)}</strong>
+                    <small>{noteSearchPreview(note)}</small>
+                  </span>
                   <small>{note.notebook_name}</small>
                 </button>
               ))}
@@ -2102,6 +2438,225 @@ export default function Home() {
                       : "Workspace counts loading"}
                   </span>
                 </div>
+                {adminHealth && (
+                  <div className="healthGrid">
+                    <span>
+                      <strong>Domain</strong>
+                      {adminHealth.app.domain}
+                    </span>
+                    <span>
+                      <strong>SSL</strong>
+                      {adminHealth.ssl.expected ? "HTTPS expected" : "Local HTTP"}
+                    </span>
+                    <span>
+                      <strong>Version</strong>
+                      {adminHealth.app.version}
+                    </span>
+                    <span>
+                      <strong>Last backup</strong>
+                      {adminHealth.backup.available
+                        ? `${formatDateTime(adminHealth.backup.created_at)} · ${formatBytes(adminHealth.backup.size)}`
+                        : "No backup found"}
+                    </span>
+                  </div>
+                )}
+                <div className="settingsActions">
+                  <button
+                    onClick={downloadLatestBackup}
+                    className="secondary"
+                    type="button"
+                    disabled={!adminHealth?.backup.available}
+                  >
+                    <Archive size={16} strokeWidth={2} />
+                    Download latest backup
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {isAdmin && (
+              <section className="settingsPanel" aria-labelledby="launch-title">
+                <div className="settingsPanelHeader">
+                  <ShieldCheck size={18} strokeWidth={2} />
+                  <div>
+                    <p className="kicker">Launch controls</p>
+                    <h3 id="launch-title">Access and plans</h3>
+                  </div>
+                </div>
+                <div className="launchStatGrid">
+                  <span>
+                    <strong>{adminHealth?.launch.registration_mode ?? appConfig?.registration_mode ?? "open"}</strong>
+                    Registration mode
+                  </span>
+                  <span>
+                    <strong>{adminHealth?.launch.email_verification_required ? "Required" : "Optional"}</strong>
+                    Email verification
+                  </span>
+                </div>
+                <div className="planList">
+                  {(appConfig?.plans ?? []).map((plan) => (
+                    <div key={plan.key} className="planRow">
+                      <span>
+                        <strong>{plan.name}</strong>
+                        <small>{plan.notes}</small>
+                      </span>
+                      <em>{plan.price}</em>
+                    </div>
+                  ))}
+                </div>
+                <div className="supportLinks">
+                  <a href="/privacy" target="_blank" rel="noreferrer">
+                    <ExternalLink size={14} strokeWidth={2} />
+                    Privacy
+                  </a>
+                  <a href="/terms" target="_blank" rel="noreferrer">
+                    <ExternalLink size={14} strokeWidth={2} />
+                    Terms
+                  </a>
+                  <a href="/support" target="_blank" rel="noreferrer">
+                    <ExternalLink size={14} strokeWidth={2} />
+                    Support
+                  </a>
+                </div>
+              </section>
+            )}
+
+            {isAdmin && (
+              <section className="settingsPanel" aria-labelledby="invite-title">
+                <div className="settingsPanelHeader">
+                  <Ticket size={18} strokeWidth={2} />
+                  <div>
+                    <p className="kicker">Hosted access</p>
+                    <h3 id="invite-title">Invite codes</h3>
+                  </div>
+                </div>
+                <form className="settingsForm" onSubmit={createInvite}>
+                  <label className="fieldGroup">
+                    <span className="fieldLabel">Restrict to email (optional)</span>
+                    <input
+                      className="input"
+                      value={inviteEmail}
+                      onChange={(event) => setInviteEmail(event.target.value)}
+                      placeholder="new-user@example.com"
+                      type="email"
+                    />
+                  </label>
+                  <button className="secondary" type="submit">
+                    <Ticket size={16} strokeWidth={2} />
+                    Create invite
+                  </button>
+                </form>
+                {inviteStatus && <p className="successText">{inviteStatus}</p>}
+                <div className="adminList">
+                  {adminInvites.map((invite) => (
+                    <div key={invite.id} className={invite.disabled_at ? "adminListRowMuted" : "adminListRow"}>
+                      <span>
+                        <strong>{invite.email || "Any email"}</strong>
+                        <small>
+                          {invite.used_count}/{invite.max_uses} used · expires {formatDateTime(invite.expires_at)}
+                        </small>
+                      </span>
+                      <button
+                        className="rowIconButton rowIconButtonDanger"
+                        onClick={() => disableInvite(invite)}
+                        type="button"
+                        disabled={Boolean(invite.disabled_at)}
+                        aria-label="Disable invite"
+                        title="Disable invite"
+                      >
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
+                    </div>
+                  ))}
+                  {!adminInvites.length && <p className="emptySmall">No invites have been created yet.</p>}
+                </div>
+              </section>
+            )}
+
+            {isAdmin && (
+              <section className="settingsPanel settingsPanelWide" aria-labelledby="users-title">
+                <div className="settingsPanelHeader">
+                  <Users size={18} strokeWidth={2} />
+                  <div>
+                    <p className="kicker">Admin</p>
+                    <h3 id="users-title">User management</h3>
+                  </div>
+                </div>
+                {adminStatus && <p className="successText">{adminStatus}</p>}
+                <div className="adminUserList">
+                  {adminUsers.map((adminUser) => {
+                    const verified = Boolean(adminUser.email_verified_at || adminUser.is_admin);
+                    const disabled = Boolean(adminUser.disabled_at);
+                    return (
+                      <div key={adminUser.id} className={disabled ? "adminUserRowMuted" : "adminUserRow"}>
+                        <div>
+                          <strong>{adminUser.name}</strong>
+                          <small>{adminUser.email}</small>
+                        </div>
+                        <span className={verified ? "statusBadgeReady" : "statusBadgeMuted"}>
+                          {verified ? "Verified" : "Unverified"}
+                        </span>
+                        <span className={disabled ? "statusBadgeDanger" : "statusBadgeReady"}>
+                          {disabled ? "Disabled" : "Active"}
+                        </span>
+                        <small>{adminUser.workspace_count} workspace</small>
+                        <div className="adminUserActions">
+                          <button
+                            className="rowIconButton"
+                            onClick={() => resendUserVerification(adminUser)}
+                            type="button"
+                            disabled={verified || disabled}
+                            aria-label={`Resend verification to ${adminUser.email}`}
+                            title="Resend verification"
+                          >
+                            <Mail size={14} strokeWidth={2} />
+                          </button>
+                          <button
+                            className="rowIconButton"
+                            onClick={() => sendUserPasswordReset(adminUser)}
+                            type="button"
+                            disabled={disabled}
+                            aria-label={`Send password reset to ${adminUser.email}`}
+                            title="Send password reset"
+                          >
+                            <KeyRound size={14} strokeWidth={2} />
+                          </button>
+                          <button
+                            className={disabled ? "rowIconButton" : "rowIconButton rowIconButtonDanger"}
+                            onClick={() => toggleAdminUser(adminUser)}
+                            type="button"
+                            disabled={adminUser.id === user?.id}
+                            aria-label={disabled ? `Enable ${adminUser.email}` : `Disable ${adminUser.email}`}
+                            title={disabled ? "Enable user" : "Disable user"}
+                          >
+                            {disabled ? <UserCheck size={14} strokeWidth={2} /> : <UserX size={14} strokeWidth={2} />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {isAdmin && (
+              <section className="settingsPanel" aria-labelledby="analytics-title">
+                <div className="settingsPanelHeader">
+                  <Activity size={18} strokeWidth={2} />
+                  <div>
+                    <p className="kicker">Activation</p>
+                    <h3 id="analytics-title">Last 30 days</h3>
+                  </div>
+                </div>
+                <div className="eventList">
+                  {adminEvents.map((event) => (
+                    <span key={event.event_name}>
+                      <strong>{event.total}</strong>
+                      {event.event_name.replaceAll("_", " ")}
+                    </span>
+                  ))}
+                  {!adminEvents.length && <p className="emptySmall">No activation events recorded yet.</p>}
+                </div>
               </section>
             )}
           </div>
@@ -2155,6 +2710,7 @@ export default function Home() {
                 <button
                   className="addButton"
                   aria-label="Create notebook"
+                  title="Create notebook"
                   disabled={!notebookName.trim()}
                 >
                   <Plus size={19} strokeWidth={2.4} />
@@ -2219,6 +2775,17 @@ export default function Home() {
                     )}
                     {renamingNotebookId !== notebook.id && (
                       <button
+                        onClick={() => toggleNotebookPin(notebook)}
+                        className={notebook.pinned_at ? "rowIconButton rowIconButtonActive" : "rowIconButton"}
+                        type="button"
+                        aria-label={notebook.pinned_at ? `Unpin ${notebook.name}` : `Pin ${notebook.name}`}
+                        title={notebook.pinned_at ? "Unpin notebook" : "Pin notebook"}
+                      >
+                        <Pin size={14} strokeWidth={2} />
+                      </button>
+                    )}
+                    {renamingNotebookId !== notebook.id && (
+                      <button
                         onClick={() => startNotebookRename(notebook)}
                         className="rowIconButton"
                         type="button"
@@ -2231,7 +2798,7 @@ export default function Home() {
                     {renamingNotebookId !== notebook.id && (
                       <button
                         onClick={() => setPendingNotebookDelete(notebook.id)}
-                        className="rowIconButton"
+                        className="rowIconButton rowIconButtonDanger"
                         type="button"
                         aria-label={`Delete ${notebook.name}`}
                         title={`Delete ${notebook.name}`}
@@ -2258,9 +2825,14 @@ export default function Home() {
                   </div>
                 ))}
                 {!notebooks.length && (
-                  <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
-                    Create a blank notebook
-                  </button>
+                  <div className="emptyStack">
+                    <button className="emptyAction" onClick={openTemplateDialog} type="button">
+                      Browse templates
+                    </button>
+                    <button className="emptyAction" onClick={() => createNotebookNamed("Personal")} type="button">
+                      Create a blank notebook
+                    </button>
+                  </div>
                 )}
                 {!!notebooks.length && !filteredNotebooks.length && (
                   <p className="emptySmall">No notebooks match that search.</p>
@@ -2280,6 +2852,7 @@ export default function Home() {
                   className="newNote"
                   disabled={!activeNotebook}
                   type="button"
+                  title="New note (Ctrl N)"
                 >
                   <Plus size={16} strokeWidth={2.4} />
                   New
@@ -2295,6 +2868,23 @@ export default function Home() {
                   disabled={!notes.length}
                 />
               </label>
+
+              {recentNotes.length > 0 && (
+                <div className="recentBlock" aria-label="Recently edited notes">
+                  <div className="railSectionHeader">
+                    <Clock3 size={14} strokeWidth={2.2} />
+                    <span>Recent</span>
+                  </div>
+                  <div className="recentList">
+                    {recentNotes.slice(0, 4).map((note) => (
+                      <button key={`recent-${note.id}`} onClick={() => openSearchNote(note)} type="button">
+                        <span>{noteTitle(note)}</span>
+                        <small>{note.notebook_name} · {compactDate(note.updated_at)}</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="list">
                 {filteredNotes.map((note) => {
@@ -2312,9 +2902,19 @@ export default function Home() {
                   );
                 })}
                 {!notes.length && (
-                  <button className="emptyAction" onClick={() => createNote()} disabled={!activeNotebook} type="button">
-                    Create your first note
-                  </button>
+                  <div className="emptyStack">
+                    <button className="emptyAction" onClick={() => createNote()} disabled={!activeNotebook} type="button">
+                      Create your first note
+                    </button>
+                    <button
+                      className="emptyAction"
+                      onClick={() => createNote(`Meeting Notes\n${starterSectionContent("meeting-notes")}`)}
+                      disabled={!activeNotebook}
+                      type="button"
+                    >
+                      Start meeting notes
+                    </button>
+                  </div>
                 )}
                 {!!notes.length && !filteredNotes.length && <p className="emptySmall">No notes match that search.</p>}
               </div>
@@ -2335,11 +2935,15 @@ export default function Home() {
                       </p>
                     </div>
                     <div className="editorActions">
+                      <button onClick={duplicateActiveNote} className="secondary" type="button" title="Duplicate note">
+                        <Copy size={15} strokeWidth={2} />
+                        Duplicate
+                      </button>
                       <button onClick={() => setPendingDelete(true)} className="dangerButton" type="button">
                         <Trash2 size={15} strokeWidth={2} />
                         Delete
                       </button>
-                      <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button">
+                      <button onClick={() => saveNote(content)} className="secondary" disabled={!isDirty} type="button" title="Save now (Ctrl S)">
                         <Save size={15} strokeWidth={2} />
                         Save now
                       </button>

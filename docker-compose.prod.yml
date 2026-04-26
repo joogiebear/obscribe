@@ -38,6 +38,11 @@ services:
       APP_ENV: ${APP_ENV:-production}
       APP_URL: ${APP_URL:-http://localhost}
       OBSCRIBE_EDITION: ${OBSCRIBE_EDITION:-selfhosted}
+      APP_VERSION: ${APP_VERSION:-unknown}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-open}
+      EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-false}
+      BACKUP_DIR: /backups
       PASSWORD_RESET_URL: ${PASSWORD_RESET_URL:-}
       PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-60}
       DB_HOST: db
@@ -55,6 +60,8 @@ services:
       MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-no-reply@obscribe.local}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Obscribe}
+    volumes:
+      - ./backups:/backups:ro
     depends_on:
       db:
         condition: service_healthy

@@ -92,6 +92,63 @@ textarea:focus-visible {
   background: var(--paper-strong);
 }
 
+.legalPage {
+  min-height: 100svh;
+  padding: 28px clamp(18px, 5vw, 72px) 72px;
+  background:
+    linear-gradient(90deg, rgba(18, 43, 39, 0.04), transparent 28%),
+    var(--paper-strong);
+}
+
+.legalBack {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.legalBack:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.legalShell {
+  width: min(760px, 100%);
+  margin: 58px auto 0;
+}
+
+.legalShell h1 {
+  margin: 10px 0 18px;
+  color: var(--ink);
+  font-size: clamp(42px, 8vw, 72px);
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+.legalShell h2 {
+  margin: 32px 0 8px;
+  color: var(--ink);
+  font-size: 21px;
+  letter-spacing: 0;
+}
+
+.legalShell p,
+.legalShell li {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.legalShell ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
 .loginPage {
   min-height: 100svh;
   display: grid;
@@ -514,11 +571,23 @@ textarea:focus-visible {
   background: #f5f6f1;
 }
 
-.globalSearchResults button span {
+.globalSearchResults button > span {
   min-width: 0;
+}
+
+.searchResultText {
+  display: grid;
+  gap: 2px;
+}
+
+.searchResultText strong,
+.searchResultText small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.searchResultText strong {
   font-weight: 750;
 }
 
@@ -636,6 +705,10 @@ textarea:focus-visible {
   padding: 24px;
 }
 
+.settingsPanelWide {
+  grid-column: 1 / -1;
+}
+
 .settingsPanelHeader {
   display: flex;
   align-items: flex-start;
@@ -672,6 +745,41 @@ textarea:focus-visible {
   margin-bottom: 12px;
 }
 
+.authNotice {
+  margin: 0 0 12px;
+  border: 1px solid #d7e5df;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.authLinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 11px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.authLinks a {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.authLinks a:hover {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .settingsActions {
   display: flex;
   flex-wrap: wrap;
@@ -685,6 +793,7 @@ textarea:focus-visible {
 .opsList {
   display: grid;
   gap: 10px;
+  margin-bottom: 18px;
 }
 
 .opsList span {
@@ -710,6 +819,184 @@ textarea:focus-visible {
 
 .opsMuted svg {
   color: var(--faint);
+}
+
+.healthGrid,
+.launchStatGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.healthGrid span,
+.launchStatGrid span,
+.eventList span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.healthGrid strong,
+.launchStatGrid strong,
+.eventList strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.planList,
+.adminList,
+.eventList {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.planRow,
+.adminListRow,
+.adminListRowMuted {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.planRow span,
+.adminListRow span,
+.adminListRowMuted span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.planRow strong,
+.adminListRow strong,
+.adminListRowMuted strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.planRow em {
+  color: var(--brand);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.adminListRowMuted,
+.adminUserRowMuted {
+  opacity: 0.58;
+}
+
+.supportLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.supportLinks a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.supportLinks a:hover {
+  border-color: #b8c1bb;
+  color: var(--brand);
+}
+
+.adminUserList {
+  display: grid;
+  gap: 8px;
+}
+
+.adminUserRow,
+.adminUserRowMuted {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) auto auto auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.adminUserRow > div:first-child,
+.adminUserRowMuted > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.adminUserRow strong,
+.adminUserRow small,
+.adminUserRowMuted strong,
+.adminUserRowMuted small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminUserActions {
+  display: flex;
+  gap: 4px;
+}
+
+.statusBadgeReady,
+.statusBadgeMuted,
+.statusBadgeDanger {
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.statusBadgeReady {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.statusBadgeMuted {
+  background: var(--wash-2);
+  color: var(--muted);
+}
+
+.statusBadgeDanger {
+  background: var(--danger-wash);
+  color: var(--danger);
 }
 
 .settingsTitle {
@@ -1180,7 +1467,7 @@ textarea:focus-visible {
 .notebookRowActive {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px 32px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px 32px;
   align-items: center;
   gap: 4px;
   color: var(--ink-soft);
@@ -1229,6 +1516,16 @@ textarea:focus-visible {
 }
 
 .rowIconButton:hover {
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+}
+
+.rowIconButtonActive {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.rowIconButtonDanger:hover {
   background: var(--danger-wash);
   color: var(--danger);
 }
@@ -1356,6 +1653,64 @@ small {
   color: var(--ink-soft);
   padding: 14px;
   font-weight: 750;
+}
+
+.emptyStack {
+  display: grid;
+  gap: 8px;
+}
+
+.recentBlock {
+  margin: 4px 0 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.railSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.recentList {
+  display: grid;
+  gap: 4px;
+}
+
+.recentList button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+}
+
+.recentList button:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.recentList span,
+.recentList small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentList span {
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .editorTop {
@@ -1839,7 +2194,16 @@ small {
 :root[data-theme="dark"] .templateDialogSearch,
 :root[data-theme="dark"] .renameNotebookForm input,
 :root[data-theme="dark"] .renameNotebookForm button,
-:root[data-theme="dark"] .emptyAction {
+:root[data-theme="dark"] .emptyAction,
+:root[data-theme="dark"] .healthGrid span,
+:root[data-theme="dark"] .launchStatGrid span,
+:root[data-theme="dark"] .planRow,
+:root[data-theme="dark"] .adminListRow,
+:root[data-theme="dark"] .adminListRowMuted,
+:root[data-theme="dark"] .adminUserRow,
+:root[data-theme="dark"] .adminUserRowMuted,
+:root[data-theme="dark"] .eventList span,
+:root[data-theme="dark"] .supportLinks a {
   background: rgba(255, 255, 255, 0.055);
   border-color: var(--line);
   color: var(--ink-soft);
@@ -1977,6 +2341,29 @@ small {
 :root[data-theme="dark"] .inlineConfirm {
   background: var(--danger-wash);
   border-color: #593040;
+}
+
+:root[data-theme="dark"] .authNotice,
+:root[data-theme="dark"] .statusBadgeReady,
+:root[data-theme="dark"] .rowIconButtonActive {
+  background: #132821;
+  border-color: #22453b;
+  color: #91d8c8;
+}
+
+:root[data-theme="dark"] .statusBadgeMuted {
+  background: #172119;
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .statusBadgeDanger {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+:root[data-theme="dark"] .rowIconButton:hover,
+:root[data-theme="dark"] .recentList button:hover {
+  background: rgba(255, 255, 255, 0.075);
 }
 
 :root[data-theme="dark"] .dangerButton:not(:disabled):hover {
@@ -2155,6 +2542,21 @@ small {
 
   .settingsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .settingsPanelWide {
+    grid-column: auto;
+  }
+
+  .healthGrid,
+  .launchStatGrid,
+  .adminUserRow,
+  .adminUserRowMuted {
+    grid-template-columns: 1fr;
+  }
+
+  .adminUserActions {
+    justify-content: flex-start;
   }
 
   .inlineConfirm {
