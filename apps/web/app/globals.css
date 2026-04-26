@@ -780,6 +780,28 @@ textarea:focus-visible {
   text-underline-offset: 3px;
 }
 
+.verificationPrompt {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 13px;
+  border: 1px solid #d7e5df;
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.verificationPrompt strong {
+  overflow-wrap: anywhere;
+}
+
+.verificationPrompt .secondary {
+  justify-self: start;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .settingsActions {
   display: flex;
   flex-wrap: wrap;
@@ -2344,6 +2366,7 @@ small {
 }
 
 :root[data-theme="dark"] .authNotice,
+:root[data-theme="dark"] .verificationPrompt,
 :root[data-theme="dark"] .statusBadgeReady,
 :root[data-theme="dark"] .rowIconButtonActive {
   background: #132821;

@@ -812,6 +812,7 @@ export default function Home() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [resetStatus, setResetStatus] = useState("");
+  const [verificationPromptEmail, setVerificationPromptEmail] = useState("");
   const [exportStatus, setExportStatus] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [editorMode, setEditorMode] = useState<"write" | "preview">("write");
@@ -1155,6 +1156,7 @@ export default function Home() {
   function switchAuthMode(nextMode: AuthMode) {
     setMode(nextMode);
     setError("");
+    setVerificationPromptEmail("");
   }
 
   function openTemplateDialog() {
@@ -1178,6 +1180,7 @@ export default function Home() {
 
   async function auth(e: FormEvent) {
     e.preventDefault();
+    setVerificationPromptEmail("");
 
     try {
       const body = mode === "register" ? { name, email, password, invite_code: inviteCode } : { email, password };
@@ -1211,7 +1214,16 @@ export default function Home() {
         setStatus("Logged in");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      const message = err instanceof Error ? err.message : "Authentication failed";
+      if (mode === "login" && message.toLowerCase().includes("verify")) {
+        const emailValue = email.trim();
+        setResetEmail(emailValue);
+        setVerificationPromptEmail(emailValue);
+        setResetStatus("That account still needs email verification.");
+        setError("");
+        return;
+      }
+      setError(message);
     }
   }
 
@@ -1235,7 +1247,7 @@ export default function Home() {
   }
 
   async function resendVerificationEmail() {
-    const emailValue = (resetEmail || email).trim();
+    const emailValue = (verificationPromptEmail || resetEmail || email).trim();
     if (!emailValue) {
       setError("Enter your account email first.");
       return;
@@ -2049,6 +2061,17 @@ export default function Home() {
 
           {error && <p className="error">{error}</p>}
           {resetStatus && <p className="successText authStatus">{resetStatus}</p>}
+          {mode === "login" && verificationPromptEmail && (
+            <div className="verificationPrompt" role="status">
+              <span>
+                Need another link for <strong>{verificationPromptEmail}</strong>?
+              </span>
+              <button className="secondary" onClick={resendVerificationEmail} type="button">
+                <Mail size={15} strokeWidth={2} />
+                Resend verification
+              </button>
+            </div>
+          )}
           {mode === "register" && registrationInviteOnly && (
             <p className="authNotice">
               New hosted accounts are invite-only right now. Enter your invite code to continue.
@@ -2195,7 +2218,7 @@ export default function Home() {
               <button className="primary" disabled={mode === "register" && registrationClosed}>
                 {mode === "login" ? "Sign in" : "Create account"}
               </button>
-              {mode === "login" && appConfig?.email_verification_required && (
+              {mode === "login" && appConfig?.email_verification_required && !verificationPromptEmail && (
                 <button className="linkButton" onClick={resendVerificationEmail} type="button">
                   Resend verification email
                 </button>
