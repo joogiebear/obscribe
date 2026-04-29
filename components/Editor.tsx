@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type JSONContent, type NodeViewProps } from '@tiptap/react';
+import { EditorContent, useEditor, type JSONContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
@@ -47,37 +47,6 @@ const Callout = Node.create({
 
 
 
-const SimpleTodo = Node.create({
-  name: 'simpleTodo',
-  group: 'block',
-  content: 'paragraph',
-  defining: true,
-  addAttributes() {
-    return { checked: { default: false } };
-  },
-  parseHTML() {
-    return [{ tag: 'div[data-type="simple-todo"]' }];
-  },
-  renderHTML({ node, HTMLAttributes }) {
-    return ['div', { ...HTMLAttributes, 'data-type': 'simple-todo', 'data-checked': node.attrs.checked }, 0];
-  },
-  addNodeView() {
-    return ReactNodeViewRenderer(SimpleTodoView);
-  }
-});
-
-function SimpleTodoView({ node, updateAttributes }: NodeViewProps) {
-  const checked = Boolean(node.attrs.checked);
-  return (
-    <NodeViewWrapper className="simple-todo-row" data-type="simple-todo" data-checked={checked}>
-      <label className="simple-todo-checkbox" contentEditable={false}>
-        <input type="checkbox" checked={checked} onChange={(event) => updateAttributes({ checked: event.target.checked })} />
-      </label>
-      <NodeViewContent className="simple-todo-content" />
-    </NodeViewWrapper>
-  );
-}
-
 export default function Editor({ content, onChange }: Props) {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
@@ -96,7 +65,6 @@ export default function Editor({ content, onChange }: Props) {
       TableHeader,
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
-      SimpleTodo,
       Callout,
       Placeholder.configure({ placeholder: 'Start writing. Try / for blocks, #tags, or [[page links]] soon…' })
     ],
@@ -208,7 +176,7 @@ export default function Editor({ content, onChange }: Props) {
 
   const slashItems = [
     { label: 'Heading', aliases: ['h2', 'title'], icon: <TextQuote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleHeading({ level: 2 }).run()) },
-    { label: 'Todo', aliases: ['task', 'checkbox', 'check'], icon: <ListTodo size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'simpleTodo', content: [{ type: 'paragraph' }] }).run()) },
+    { label: 'Todo', aliases: ['task', 'checkbox', 'check'], icon: <ListTodo size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'paragraph', content: [{ type: 'text', text: '☐ ' }] }).run()) },
     { label: 'Quote', aliases: ['blockquote'], icon: <Quote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleBlockquote().run()) },
     { label: 'Divider', aliases: ['line', 'rule', 'hr'], icon: <Minus size={16} />, action: () => runSlash(() => editor?.chain().focus().setHorizontalRule().run()) },
     { label: 'Code block', aliases: ['code', 'pre', 'snippet'], icon: <Code2 size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleCodeBlock().run()) },
