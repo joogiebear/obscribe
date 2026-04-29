@@ -270,6 +270,8 @@ export default function ObscribeApp() {
   const [newNotebookName, setNewNotebookName] = useState('');
   const [newNotebookColor, setNewNotebookColor] = useState(colors[0]);
   const [includeStarterSections, setIncludeStarterSections] = useState(true);
+  const [showSectionModal, setShowSectionModal] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
   const [aiSummary, setAiSummary] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ title: string; body: string; confirmLabel: string; destructive?: boolean; onConfirm: () => Promise<void> } | null>(null);
@@ -771,7 +773,7 @@ export default function ObscribeApp() {
   async function createSection() {
     if (!activeNotebookId) return;
     if (sections.length >= alphaLimits.sections) { setOperationError(`Section limit reached (${alphaLimits.sections}).`); return; }
-    const name = (prompt('New tab name', 'Notes')?.trim() || '').slice(0, alphaLimits.notebookNameChars);
+    const name = (newSectionName.trim() || 'Notes').slice(0, alphaLimits.notebookNameChars);
     if (!name) return;
     const now = new Date().toISOString();
     const section: Section = { id: newId(), notebookId: activeNotebookId, name, order: notebookSections.length, createdAt: now, updatedAt: now };
@@ -785,6 +787,8 @@ export default function ObscribeApp() {
     }
 
     setSections((prev) => [...prev, section]);
+    setShowSectionModal(false);
+    setNewSectionName('');
     setActiveSectionId(section.id);
     setActivePageId(undefined);
   }
@@ -1069,7 +1073,7 @@ export default function ObscribeApp() {
             </div>
           </section>
         ) : <>
-        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => renameSection(section)}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}<button className="tab-add" onClick={createSection}><Plus size={14} /> Tab</button></nav>
+        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => renameSection(section)}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}<button className="tab-add" onClick={() => { setNewSectionName(''); setShowSectionModal(true); }}><Plus size={14} /> Tab</button></nav>
 
         {showTrash ? (
           <section className="trash-panel">
@@ -1123,6 +1127,17 @@ export default function ObscribeApp() {
             <div className="modal-field"><span>Accent color</span><div className="color-row">{colors.map((color) => <button key={color} className={color === newNotebookColor ? 'color-dot active' : 'color-dot'} style={{ background: color }} onClick={() => setNewNotebookColor(color)} aria-label={`Use ${color}`} />)}</div></div>
             <label className="starter-toggle"><input type="checkbox" checked={includeStarterSections} onChange={(event) => setIncludeStarterSections(event.target.checked)} /> Add starter sections: Inbox, Journal, Projects, References</label>
             <div className="modal-actions"><button className="ghost-button" onClick={() => setShowNotebookModal(false)}>Cancel</button><button className="new" onClick={createNotebook}><Plus size={16} /> Create Notebook</button></div>
+          </section>
+        </div>
+      )}
+      {showSectionModal && (
+        <div className="modal-backdrop" onMouseDown={() => setShowSectionModal(false)}>
+          <section className="notebook-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <p className="eyebrow">New tab</p>
+            <h2>Add a notebook tab</h2>
+            <p className="modal-copy">Tabs keep pages grouped inside “{activeNotebook?.name ?? 'this notebook'}”.</p>
+            <label className="modal-field">Tab name<input value={newSectionName} onChange={(event) => setNewSectionName(event.target.value)} placeholder="Meetings, Clients, Ideas…" autoFocus onKeyDown={(event) => { if (event.key === 'Enter') createSection(); if (event.key === 'Escape') setShowSectionModal(false); }} /></label>
+            <div className="modal-actions"><button className="ghost-button" onClick={() => setShowSectionModal(false)}>Cancel</button><button className="new" onClick={createSection}><Plus size={16} /> Create Tab</button></div>
           </section>
         </div>
       )}
