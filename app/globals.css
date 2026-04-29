@@ -289,6 +289,9 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .settings-card .modal-field select { width: 100%; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,.82); color: var(--ink); outline: none; padding: 11px 12px; }
 .settings-card .modal-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent), transparent 82%); }
 .settings-note { font-size: 13px; }
+.vault-mode { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.42); padding: 10px; display: grid; gap: 8px; }
+.vault-mode label { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
+.vault-mode input { accent-color: var(--accent); }
 .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .settings-actions button { flex: 1 1 160px; }
 .ai-card { grid-column: span 2; }

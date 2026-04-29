@@ -42,13 +42,14 @@ const aiProviderKeyLinks: Record<AiProvider, string> = {
 };
 
 const aiProviderMethods: Record<AiProvider, string> = {
-  openai: 'API key now. OpenAI account connection can be added once OAuth app credentials are available.',
+  openai: 'Use your OpenAI API key. ChatGPT subscription support may come later as a separate integration.',
   anthropic: 'API key only for now.',
   google: 'API key only for now.',
   xai: 'API key only for now.'
 };
 
 type AiKeyVault = { version: 1; provider: AiProvider; salt: string; iv: string; ciphertext: string };
+type AiStorageMode = 'account' | 'local';
 const aiVaultKey = 'obscribe-ai-key-vault';
 const legacyAiProviderKey = 'obscribe-ai-provider';
 const legacyAiApiKey = 'obscribe-ai-api-key';
@@ -104,6 +105,7 @@ export default function AuthPanel() {
   const [aiProvider, setAiProvider] = useState<AiProvider>('openai');
   const [aiApiKey, setAiApiKey] = useState('');
   const [aiPassphrase, setAiPassphrase] = useState('');
+  const [aiStorageMode, setAiStorageMode] = useState<AiStorageMode>('account');
   const [hasSavedAiKey, setHasSavedAiKey] = useState(false);
   const [aiKeyUnlocked, setAiKeyUnlocked] = useState(false);
 
@@ -124,6 +126,15 @@ export default function AuthPanel() {
 
   useEffect(() => {
     if (!settingsOpen) return;
+    setAiStorageMode(user ? 'account' : 'local');
+    if (user) {
+      loadAccountAiSettings();
+      return;
+    }
+    loadLocalAiSettings();
+  }, [settingsOpen, user]);
+
+  function loadLocalAiSettings() {
     const vaultRaw = localStorage.getItem(aiVaultKey);
     const legacyProvider = localStorage.getItem(legacyAiProviderKey) as AiProvider | null;
     const legacyKey = localStorage.getItem(legacyAiApiKey) ?? '';
@@ -144,7 +155,48 @@ export default function AuthPanel() {
     setHasSavedAiKey(Boolean(legacyKey));
     setAiKeyUnlocked(Boolean(legacyKey));
     if (legacyKey) setSettingsMessage('Existing AI key found. Save it with a passphrase to encrypt it.');
-  }, [settingsOpen]);
+  }
+
+  async function accountVaultRequest(method: 'GET' | 'PUT' | 'DELETE', body?: unknown) {
+    if (!supabase) throw new Error('Sign in before syncing an AI key.');
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error('Your session expired. Sign in again before syncing an AI key.');
+    const response = await fetch('/api/ai-vault', {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'AI key sync failed.');
+    return payload as { connected?: boolean; provider?: AiProvider; apiKey?: string; updatedAt?: string };
+  }
+
+  async function loadAccountAiSettings() {
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      const payload = await accountVaultRequest('GET');
+      if (payload.connected && payload.provider && payload.apiKey) {
+        setAiProvider(payload.provider);
+        setAiApiKey(payload.apiKey);
+        setHasSavedAiKey(true);
+        setAiKeyUnlocked(true);
+        setSettingsMessage('Synced AI key loaded for this account.');
+      } else {
+        setAiApiKey('');
+        setHasSavedAiKey(false);
+        setAiKeyUnlocked(false);
+      }
+    } catch (error) {
+      setAiApiKey('');
+      setHasSavedAiKey(false);
+      setAiKeyUnlocked(false);
+      setSettingsMessage(error instanceof Error ? error.message : 'Could not load synced AI key.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
 
   async function saveProfile() {
     if (!supabase) return;
@@ -179,13 +231,20 @@ export default function AuthPanel() {
       setSettingsMessage('Paste an API key before saving.');
       return;
     }
-    if (aiPassphrase.length < 8) {
+    if (aiStorageMode === 'local' && aiPassphrase.length < 8) {
       setSettingsMessage('Use an encryption passphrase with at least 8 characters.');
       return;
     }
     setSettingsBusy(true);
-    setSettingsMessage('Encrypting and saving your AI key on this device…');
+    setSettingsMessage(aiStorageMode === 'account' ? 'Encrypting and syncing your AI key to this account…' : 'Encrypting and saving your AI key on this device…');
     try {
+      if (aiStorageMode === 'account') {
+        await accountVaultRequest('PUT', { provider: aiProvider, apiKey: aiApiKey.trim() });
+        setHasSavedAiKey(true);
+        setAiKeyUnlocked(true);
+        setSettingsMessage(`${aiProviderLabels[aiProvider]} encrypted and synced to this account.`);
+        return;
+      }
       const vault = await encryptAiKey(aiProvider, aiApiKey.trim(), aiPassphrase);
       localStorage.setItem(aiVaultKey, JSON.stringify(vault));
       localStorage.removeItem(legacyAiProviderKey);
@@ -203,6 +262,10 @@ export default function AuthPanel() {
   }
 
   async function unlockAiSettings() {
+    if (aiStorageMode === 'account') {
+      await loadAccountAiSettings();
+      return;
+    }
     const vaultRaw = localStorage.getItem(aiVaultKey);
     if (!vaultRaw) return;
     if (!aiPassphrase) {
@@ -225,16 +288,29 @@ export default function AuthPanel() {
     }
   }
 
-  function clearAiSettings() {
-    localStorage.removeItem(aiVaultKey);
-    localStorage.removeItem(legacyAiProviderKey);
-    localStorage.removeItem(legacyAiApiKey);
+  async function clearAiSettings() {
+    if (aiStorageMode === 'account') {
+      setSettingsBusy(true);
+      setSettingsMessage(null);
+      try {
+        await accountVaultRequest('DELETE');
+        setSettingsMessage('Synced AI provider key removed from this account.');
+      } catch (error) {
+        setSettingsMessage(error instanceof Error ? error.message : 'Could not remove synced AI key.');
+      } finally {
+        setSettingsBusy(false);
+      }
+    } else {
+      localStorage.removeItem(aiVaultKey);
+      localStorage.removeItem(legacyAiProviderKey);
+      localStorage.removeItem(legacyAiApiKey);
+      setSettingsMessage('AI provider key removed from this device.');
+    }
     setAiProvider('openai');
     setAiApiKey('');
     setAiPassphrase('');
     setHasSavedAiKey(false);
     setAiKeyUnlocked(false);
-    setSettingsMessage('AI provider key removed from this device.');
   }
 
   async function signOut() {
@@ -329,12 +405,15 @@ export default function AuthPanel() {
                     </select>
                   </label>
                   <p className="settings-note"><strong>Connection method:</strong> {aiProviderMethods[aiProvider]}</p>
-                  {aiProvider === 'openai' && <button className="ghost-button" disabled title="OpenAI OAuth needs app credentials before it can be enabled.">Connect OpenAI account soon</button>}
+                  <div className="vault-mode">
+                    <label><input type="radio" checked={aiStorageMode === 'account'} disabled={!user} onChange={() => setAiStorageMode('account')} /> Sync to account</label>
+                    <label><input type="radio" checked={aiStorageMode === 'local'} onChange={() => { setAiStorageMode('local'); loadLocalAiSettings(); }} /> Local encrypted only</label>
+                  </div>
                   <a className="provider-key-link" href={aiProviderKeyLinks[aiProvider]} target="_blank" rel="noreferrer">Get an API key for {aiProviderLabels[aiProvider]}</a>
                   <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => { setAiApiKey(event.target.value); setAiKeyUnlocked(Boolean(event.target.value)); }} placeholder={hasSavedAiKey && !aiKeyUnlocked ? 'Encrypted key saved — unlock to view or replace' : 'Paste provider API key'} autoComplete="off" /></label>
-                  <label className="modal-field">Encryption passphrase<input type="password" value={aiPassphrase} onChange={(event) => setAiPassphrase(event.target.value)} placeholder="Not saved by Obscribe" autoComplete="off" /></label>
-                  <p className="settings-note">Alpha note: the API key is encrypted with your passphrase before being stored locally in this browser. Obscribe does not save the passphrase, so you’ll need it to unlock the key on this device.</p>
-                  <div className="settings-actions"><button className="new" onClick={saveAiSettings} disabled={settingsBusy || !aiApiKey.trim()}><Save size={16} /> {settingsBusy ? 'Saving…' : 'Encrypt & save'}</button><button className="ghost-button" onClick={unlockAiSettings} disabled={settingsBusy || !hasSavedAiKey || !aiPassphrase}>Unlock</button><button className="ghost-button" onClick={clearAiSettings} disabled={!hasSavedAiKey && !aiApiKey}><Trash2 size={16} /> Remove</button></div>
+                  {aiStorageMode === 'local' && <label className="modal-field">Encryption passphrase<input type="password" value={aiPassphrase} onChange={(event) => setAiPassphrase(event.target.value)} placeholder="Not saved by Obscribe" autoComplete="off" /></label>}
+                  <p className="settings-note">{aiStorageMode === 'account' ? 'Default: Obscribe encrypts your API key on the server and syncs it to your signed-in account, so it works on your other devices after login.' : 'Private mode: the API key is encrypted with your passphrase and stored only in this browser. Obscribe does not save the passphrase.'}</p>
+                  <div className="settings-actions"><button className="new" onClick={saveAiSettings} disabled={settingsBusy || !aiApiKey.trim()}><Save size={16} /> {settingsBusy ? 'Saving…' : aiStorageMode === 'account' ? 'Encrypt & sync' : 'Encrypt & save'}</button><button className="ghost-button" onClick={unlockAiSettings} disabled={settingsBusy || !hasSavedAiKey || (aiStorageMode === 'local' && !aiPassphrase)}>{aiStorageMode === 'account' ? 'Reload synced key' : 'Unlock'}</button><button className="ghost-button" onClick={clearAiSettings} disabled={settingsBusy || (!hasSavedAiKey && !aiApiKey)}><Trash2 size={16} /> Remove</button></div>
                   {settingsMessage && <p className="settings-message inline">{settingsMessage}</p>}
                 </section>
 
