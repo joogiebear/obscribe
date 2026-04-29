@@ -188,3 +188,8 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .danger-button:hover { background: #873123; }
 .editor-modal-backdrop { position: fixed; }
 .editor-input-modal { text-align: left; }
+.prose-page li[data-type="taskItem"] { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.prose-page li[data-type="taskItem"] > label { display: inline-flex; align-items: center; padding-top: 6px; margin: 0; line-height: 1; }
+.prose-page li[data-type="taskItem"] > div { min-width: 0; }
+.prose-page li[data-type="taskItem"] > div > p { margin-top: 0; }
+.prose-page li[data-type="taskItem"] input[type="checkbox"] { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
