@@ -1,1 +1,0 @@
-Laravel 13 API placeholder

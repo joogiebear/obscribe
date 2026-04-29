@@ -1,1 +1,0 @@
-Laravel will be installed via composer in container. Placeholder for now.
