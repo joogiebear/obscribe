@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import MiniSearch from 'minisearch';
-import { BookOpen, CheckCircle2, Inbox, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { BookOpen, CalendarDays, CheckCircle2, Inbox, ListTodo, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
 import AuthPanel from './AuthPanel';
 import { db } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
@@ -105,6 +105,80 @@ function welcomePageContent(): JSONContent {
       ]},
       { type: 'paragraph', content: [{ type: 'text', text: 'Try adding #ideas or searching for “Local Alpha”.' }] }
     ]
+  };
+}
+
+type StarterPageKind = 'daily' | 'checklist' | 'study' | 'project';
+
+const starterPageOptions: Array<{ kind: StarterPageKind; label: string; helper: string; icon: typeof CalendarDays }> = [
+  { kind: 'daily', label: 'Daily note', helper: 'Date, focus, loose thoughts', icon: CalendarDays },
+  { kind: 'checklist', label: 'Checklist', helper: 'A simple page of tasks', icon: ListTodo },
+  { kind: 'study', label: 'Study notes', helper: 'Topic, key points, questions', icon: BookOpen },
+  { kind: 'project', label: 'Project page', helper: 'Goal, next steps, notes', icon: Sparkles }
+];
+
+function todayTitle() {
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date());
+}
+
+function starterPageContent(kind: StarterPageKind): { title: string; content: JSONContent } {
+  if (kind === 'daily') {
+    const title = todayTitle();
+    return {
+      title,
+      content: { type: 'doc', content: [
+        { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: title }] },
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Focus' }] },
+        { type: 'paragraph' },
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Notes' }] },
+        { type: 'paragraph' }
+      ] }
+    };
+  }
+
+  if (kind === 'checklist') {
+    return {
+      title: 'Checklist',
+      content: { type: 'doc', content: [
+        { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Checklist' }] },
+        { type: 'taskList', content: [
+          { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph' }] },
+          { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph' }] },
+          { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph' }] }
+        ] }
+      ] }
+    };
+  }
+
+  if (kind === 'study') {
+    return {
+      title: 'Study Notes',
+      content: { type: 'doc', content: [
+        { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Study Notes' }] },
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Topic' }] },
+        { type: 'paragraph' },
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Key points' }] },
+        { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] },
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Questions' }] },
+        { type: 'paragraph' }
+      ] }
+    };
+  }
+
+  return {
+    title: 'Project Page',
+    content: { type: 'doc', content: [
+      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Project Page' }] },
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Goal' }] },
+      { type: 'paragraph' },
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Next steps' }] },
+      { type: 'taskList', content: [
+        { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph' }] },
+        { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph' }] }
+      ] },
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Notes' }] },
+      { type: 'paragraph' }
+    ] }
   };
 }
 
@@ -273,6 +347,7 @@ export default function ObscribeApp() {
   const notebookSections = sections.filter((s) => s.notebookId === activeNotebookId).sort((a, b) => a.order - b.order);
   const sectionPages = pages.filter((p) => p.sectionId === activeSectionId).sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.order - b.order);
   const activePage = pages.find((p) => p.id === activePageId);
+  const activePageIsBlank = Boolean(activePage && !activePage.plainText.trim());
 
   const searchResults = useMemo(() => {
     if (!query.trim()) return [];
@@ -395,6 +470,39 @@ export default function ObscribeApp() {
         setOperationError(`Save failed: ${errorMessage(error)}`);
       }
     }, 750);
+  }
+
+  async function applyStarterPage(page: PageRecord, kind: StarterPageKind) {
+    try {
+      const starter = starterPageContent(kind);
+      const plainText = textFromDoc(starter.content);
+      const updatedAt = new Date().toISOString();
+      const updated: PageRecord = {
+        ...page,
+        title: starter.title,
+        titleSource: 'manual',
+        content: starter.content,
+        plainText,
+        tags: tagsFromText(plainText),
+        updatedAt
+      };
+
+      setPages((prev) => prev.map((item) => item.id === page.id ? updated : item));
+      setSaveState('saving');
+      setOperationError(null);
+
+      if (saveTimers.current[page.id]) clearTimeout(saveTimers.current[page.id]);
+      if (isCloudMode && supabase) {
+        const { error } = await supabase.from('pages').update({ title: updated.title, title_source: updated.titleSource, content: updated.content, plain_text: updated.plainText, tags: updated.tags, updated_at: updatedAt }).eq('id', updated.id);
+        if (error) throw error;
+      } else {
+        await db.pages.put(updated);
+      }
+      setSaveState('saved');
+    } catch (error: unknown) {
+      setSaveState('error');
+      setOperationError(`Couldn’t set up that page: ${errorMessage(error)}`);
+    }
   }
 
 
@@ -802,6 +910,13 @@ export default function ObscribeApp() {
           <article className="paper">
             {activePage ? <>
               <div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div>
+              {activePageIsBlank && <div className="starter-inserts" aria-label="Page starters">
+                <span>Start with</span>
+                {starterPageOptions.map((option) => {
+                  const Icon = option.icon;
+                  return <button key={option.kind} onClick={() => applyStarterPage(activePage, option.kind)}><Icon size={15} /><strong>{option.label}</strong><small>{option.helper}</small></button>;
+                })}
+              </div>}
               <Editor key={activePage.id} content={activePage.content} onChange={(doc) => savePageContent(activePage, doc)} />
             </> : <div className="empty"><h2>No page selected</h2><p>Create a page to start writing in this section.</p><button onClick={() => createPage()}>Create page</button></div>}
           </article>
