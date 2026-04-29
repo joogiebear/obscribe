@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import MiniSearch from 'minisearch';
 import { BookOpen, CalendarDays, CheckCircle2, Inbox, ListTodo, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
 import AuthPanel from './AuthPanel';
@@ -861,6 +862,12 @@ export default function ObscribeApp() {
           ))}
         </div>
         <AuthPanel />
+        <nav className="trust-links" aria-label="Obscribe information">
+          <Link href="/about">About</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+          <Link href="/contact">Contact</Link>
+        </nav>
       </aside>
 
       <section className="workspace">

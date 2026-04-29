@@ -41,6 +41,13 @@ const aiProviderKeyLinks: Record<AiProvider, string> = {
   xai: 'https://console.x.ai/'
 };
 
+const aiProviderMethods: Record<AiProvider, string> = {
+  openai: 'API key now. OpenAI account connection can be added once OAuth app credentials are available.',
+  anthropic: 'API key only for now.',
+  google: 'API key only for now.',
+  xai: 'API key only for now.'
+};
+
 type AiKeyVault = { version: 1; provider: AiProvider; salt: string; iv: string; ciphertext: string };
 const aiVaultKey = 'obscribe-ai-key-vault';
 const legacyAiProviderKey = 'obscribe-ai-provider';
@@ -321,6 +328,8 @@ export default function AuthPanel() {
                       {Object.entries(aiProviderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </select>
                   </label>
+                  <p className="settings-note"><strong>Connection method:</strong> {aiProviderMethods[aiProvider]}</p>
+                  {aiProvider === 'openai' && <button className="ghost-button" disabled title="OpenAI OAuth needs app credentials before it can be enabled.">Connect OpenAI account soon</button>}
                   <a className="provider-key-link" href={aiProviderKeyLinks[aiProvider]} target="_blank" rel="noreferrer">Get an API key for {aiProviderLabels[aiProvider]}</a>
                   <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => { setAiApiKey(event.target.value); setAiKeyUnlocked(Boolean(event.target.value)); }} placeholder={hasSavedAiKey && !aiKeyUnlocked ? 'Encrypted key saved — unlock to view or replace' : 'Paste provider API key'} autoComplete="off" /></label>
                   <label className="modal-field">Encryption passphrase<input type="password" value={aiPassphrase} onChange={(event) => setAiPassphrase(event.target.value)} placeholder="Not saved by Obscribe" autoComplete="off" /></label>
