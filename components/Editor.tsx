@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type JSONContent, type NodeViewProps } from '@tiptap/react';
+import { EditorContent, useEditor, type JSONContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
@@ -36,26 +36,16 @@ const Callout = Node.create({
     };
   },
   parseHTML() {
-    return [{ tag: 'div[data-type="callout"]' }];
+    return [{
+      tag: 'div[data-type="callout"]',
+      getAttrs: (element) => ({ kind: element instanceof HTMLElement ? element.dataset.kind || 'note' : 'note' })
+    }];
   },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', { ...HTMLAttributes, 'data-type': 'callout', 'data-kind': HTMLAttributes.kind }, 0];
-  },
-  addNodeView() {
-    return ReactNodeViewRenderer(CalloutView);
+  renderHTML({ node, HTMLAttributes }) {
+    const kind = node.attrs.kind ?? 'note';
+    return ['div', { ...HTMLAttributes, class: `callout-block ${kind}`, 'data-type': 'callout', 'data-kind': kind }, ['div', { class: 'callout-content' }, 0]];
   }
 });
-
-function CalloutView({ node }: NodeViewProps) {
-  const kind = node.attrs.kind ?? 'note';
-  const icon = kind === 'idea' ? '💡' : kind === 'warning' ? '⚠️' : kind === 'question' ? '❓' : '📝';
-  return (
-    <NodeViewWrapper className={`callout-block ${kind}`} data-type="callout" data-kind={kind}>
-      <div className="callout-icon">{icon}</div>
-      <NodeViewContent className="callout-content" />
-    </NodeViewWrapper>
-  );
-}
 
 export default function Editor({ content, onChange }: Props) {
   const [slashOpen, setSlashOpen] = useState(false);
