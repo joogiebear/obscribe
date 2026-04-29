@@ -34,8 +34,10 @@ const aiLimits = {
 
 const aiSummaryCacheKey = 'obscribe-ai-summary-cache';
 const activeSelectionKey = 'obscribe-active-selection';
+const workspaceCachePrefix = 'obscribe-workspace-cache';
 
 type ActiveSelection = { notebookId?: string; sectionId?: string; pageId?: string };
+type WorkspaceCache = { books: Notebook[]; secs: Section[]; pgs: PageRecord[]; savedAt: string };
 
 function readActiveSelection(): ActiveSelection {
   try {
@@ -50,6 +52,27 @@ function writeActiveSelection(selection: ActiveSelection) {
     localStorage.setItem(activeSelectionKey, JSON.stringify(selection));
   } catch {
     // Ignore private-mode/storage failures; selection restore is just a convenience.
+  }
+}
+
+function workspaceCacheKey(scope: string) {
+  return `${workspaceCachePrefix}:${scope}`;
+}
+
+function readWorkspaceCache(scope: string): WorkspaceCache | null {
+  try {
+    const cached = localStorage.getItem(workspaceCacheKey(scope));
+    return cached ? JSON.parse(cached) as WorkspaceCache : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkspaceCache(scope: string, cache: WorkspaceCache) {
+  try {
+    localStorage.setItem(workspaceCacheKey(scope), JSON.stringify(cache));
+  } catch {
+    // Ignore storage failures; the live workspace still loads normally.
   }
 }
 
@@ -269,6 +292,7 @@ function appendSummaryDoc(page: PageRecord, summary: string): JSONContent {
 
 export default function ObscribeApp() {
   const [ready, setReady] = useState(false);
+  const [refreshingWorkspace, setRefreshingWorkspace] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -298,6 +322,7 @@ export default function ObscribeApp() {
   const [aiSummary, setAiSummary] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ title: string; body: string; confirmLabel: string; destructive?: boolean; onConfirm: () => Promise<void> } | null>(null);
+  const hasShownWorkspace = useRef(false);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const isCloudMode = Boolean(user && supabase);
@@ -307,27 +332,44 @@ export default function ObscribeApp() {
       setReady(false);
       const currentUser = supabase ? (await supabase.auth.getUser()).data.user : null;
       setUser(currentUser ?? null);
+      const scope = currentUser?.id ?? 'local';
+      const cached = readWorkspaceCache(scope);
+      if (cached) {
+        setWorkspace(cached.books, cached.secs, cached.pgs);
+        setReady(true);
+        hasShownWorkspace.current = true;
+        setRefreshingWorkspace(true);
+      }
       await loadWorkspace(currentUser ?? null);
       setReady(true);
+      hasShownWorkspace.current = true;
+      setRefreshingWorkspace(false);
     }
 
     boot().catch((error: unknown) => {
       console.error('Failed to open Obscribe notebook', error);
       setLoadError(errorMessage(error));
       setReady(true);
+      hasShownWorkspace.current = true;
+      setRefreshingWorkspace(false);
     });
 
     if (!supabase) return;
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       const nextUser = session?.user ?? null;
       setUser(nextUser);
-      setReady(false);
+      if (!hasShownWorkspace.current) setReady(false);
+      setRefreshingWorkspace(true);
       loadWorkspace(nextUser)
-        .then(() => setReady(true))
+        .then(() => { setReady(true); hasShownWorkspace.current = true; })
         .catch((error: unknown) => {
           console.error('Failed to switch Obscribe workspace', error);
           setLoadError(errorMessage(error));
           setReady(true);
+          hasShownWorkspace.current = true;
+        })
+        .finally(() => {
+          setRefreshingWorkspace(false);
         });
     });
     return () => data.subscription.unsubscribe();
@@ -390,7 +432,7 @@ export default function ObscribeApp() {
       db.pages.orderBy('order').toArray()
     ]);
     setTrashLoaded(false);
-    setWorkspace(books, allSecs.filter((section) => !section.trashedAt), allPgs.filter((page) => !page.trashedAt));
+    setWorkspace(books, allSecs.filter((section) => !section.trashedAt), allPgs.filter((page) => !page.trashedAt), 'local');
   }
 
   async function loadCloudWorkspace(userId: string) {
@@ -414,7 +456,7 @@ export default function ObscribeApp() {
     if (sError) throw sError;
     if (pError) throw pError;
 
-    setWorkspace((cloudNotebooks ?? []).map(toNotebook), (cloudSections ?? []).map(toSection), (cloudPages ?? []).map(toPage));
+    setWorkspace((cloudNotebooks ?? []).map(toNotebook), (cloudSections ?? []).map(toSection), (cloudPages ?? []).map(toPage), userId);
     setTrashLoaded(false);
   }
 
@@ -434,7 +476,7 @@ export default function ObscribeApp() {
     if (pageError) throw pageError;
   }
 
-  function setWorkspace(books: Notebook[], secs: Section[], pgs: PageRecord[]) {
+  function setWorkspace(books: Notebook[], secs: Section[], pgs: PageRecord[], cacheScope?: string) {
     setNotebooks(books);
     setSections(secs);
     setPages(pgs);
@@ -449,10 +491,12 @@ export default function ObscribeApp() {
     setActiveNotebookId(selectedBook?.id);
     setActiveSectionId(selectedSection?.id);
     setActivePageId(selectedPage?.id);
+    if (cacheScope) writeWorkspaceCache(cacheScope, { books, secs, pgs, savedAt: new Date().toISOString() });
   }
 
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId);
   const notebookSections = sections.filter((s) => s.notebookId === activeNotebookId).sort((a, b) => a.order - b.order);
+  const activeSection = sections.find((s) => s.id === activeSectionId);
   const sectionPages = pages.filter((p) => p.sectionId === activeSectionId).sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.order - b.order);
   const activePage = pages.find((p) => p.id === activePageId);
   const activePageIsBlank = Boolean(activePage && !activePage.plainText.trim());
@@ -1082,7 +1126,7 @@ export default function ObscribeApp() {
   const trashCount = trashedNotebooks.length + trashedSections.length + trashedPages.length;
 
 
-  if (!ready) return <main className="loading">Opening your notebook…</main>;
+  if (!ready) return <main className="loading"><section className="loading-card"><div className="loading-mark"><Sparkles size={22} /></div><p className="eyebrow">Obscribe</p><h1>Opening your notebook</h1><p>Pulling your latest tabs and pages into place…</p></section></main>;
   if (loadError) return <main className="loading error-state"><h1>Couldn’t open the notebook</h1><p>{loadError}</p><p>If you just created Supabase tables, refresh once and confirm RLS policies are enabled.</p></main>;
 
   return (
@@ -1120,7 +1164,7 @@ export default function ObscribeApp() {
 
         {query && <div className="results">{searchResults.length ? searchResults.map((result) => <button key={result.id} onClick={() => { const page = pages.find((p) => p.id === result.id); setActiveSectionId(page?.sectionId); setActivePageId(String(result.id)); setQuery(''); }}>{String(result.title)}</button>) : <p>No matches yet.</p>}</div>}
 
-        <div className="sync-strip"><CheckCircle2 size={15} /> Page status <span className={`save-pill ${saveState}`}>{saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Ready'}</span></div>
+        <div className="sync-strip"><CheckCircle2 size={15} /> Page status <span className={`save-pill ${saveState}`}>{refreshingWorkspace ? 'Refreshing…' : saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Ready'}</span></div>
 
         <div className="capture"><Inbox size={17} /><input value={capture} maxLength={alphaLimits.quickCaptureChars} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
         {operationError && <div className="operation-error">{operationError}</div>}
@@ -1166,7 +1210,7 @@ export default function ObscribeApp() {
                 })}
               </div>}
               <Editor key={activePage.id} content={activePage.content} onChange={(doc) => savePageContent(activePage, doc)} />
-            </> : <div className="empty"><h2>No page selected</h2><p>Create a page to start writing in this section.</p><button onClick={() => createPage()}>Create page</button></div>}
+            </> : <div className="empty empty-tab"><div className="empty-icon"><BookOpen size={24} /></div><p className="eyebrow">{activeSection?.name ?? 'Empty tab'}</p><h2>This tab is ready when you are</h2><p>No pages live here yet. Create one, or use Quick Capture above when a loose thought shows up.</p><button onClick={() => createPage()}><Plus size={16} /> Create page in {activeSection?.name ?? 'this tab'}</button></div>}
           </article>
         </div>
         )}
