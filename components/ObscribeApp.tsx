@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import MiniSearch from 'minisearch';
 import { BookOpen, CheckCircle2, Inbox, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
@@ -111,6 +111,11 @@ export default function ObscribeApp() {
   const [trashedNotebooks, setTrashedNotebooks] = useState<Notebook[]>([]);
   const [trashedSections, setTrashedSections] = useState<Section[]>([]);
   const [trashedPages, setTrashedPages] = useState<PageRecord[]>([]);
+  const [showNotebookModal, setShowNotebookModal] = useState(false);
+  const [newNotebookName, setNewNotebookName] = useState('');
+  const [newNotebookColor, setNewNotebookColor] = useState(colors[0]);
+  const [includeStarterSections, setIncludeStarterSections] = useState(true);
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const isCloudMode = Boolean(user && supabase);
 
@@ -145,6 +150,12 @@ export default function ObscribeApp() {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      Object.values(saveTimers.current).forEach(clearTimeout);
+    };
+  }, []);
+
   async function loadWorkspace(currentUser: User | null) {
     if (currentUser && supabase) {
       await loadCloudWorkspace(currentUser.id);
@@ -156,7 +167,8 @@ export default function ObscribeApp() {
   async function loadLocalWorkspace() {
     let allBooks = await db.notebooks.orderBy('order').toArray();
     let books = allBooks.filter((book) => !book.trashedAt);
-    if (!books.length) {
+    const localStarterKey = 'obscribe-local-starter-created';
+    if (!allBooks.length && localStorage.getItem(localStarterKey) !== 'true') {
       const now = new Date().toISOString();
       const notebook: Notebook = { id: newId(), name: 'My First Notebook', accentColor: colors[0], order: 0, createdAt: now, updatedAt: now };
       const secs: Section[] = starterSections.map((name, order) => ({ id: newId(), notebookId: notebook.id, name, order, createdAt: now, updatedAt: now }));
@@ -168,6 +180,8 @@ export default function ObscribeApp() {
         await db.sections.bulkAdd(secs);
         await db.pages.add(page);
       });
+      localStorage.setItem(localStarterKey, 'true');
+      allBooks = [notebook];
       books = [notebook];
     }
     const allSecs = await db.sections.orderBy('order').toArray();
@@ -281,13 +295,21 @@ export default function ObscribeApp() {
     }
   };
 
-  async function createNotebook() {
-    const name = prompt('Notebook name?', 'New Notebook')?.trim();
-    if (!name) return;
-    const now = new Date().toISOString();
-    const notebook: Notebook = { id: newId(), name, accentColor: colors[notebooks.length % colors.length], order: notebooks.length, createdAt: now, updatedAt: now };
-    const secs: Section[] = starterSections.map((section, order) => ({ id: newId(), notebookId: notebook.id, name: section, order, createdAt: now, updatedAt: now }));
+  function openNotebookModal() {
+    setNewNotebookName('');
+    setNewNotebookColor(colors[notebooks.length % colors.length]);
+    setIncludeStarterSections(true);
+    setShowNotebookModal(true);
+  }
 
+  async function createNotebook() {
+    const name = newNotebookName.trim() || 'New Notebook';
+    const now = new Date().toISOString();
+    const notebook: Notebook = { id: newId(), name, accentColor: newNotebookColor, order: notebooks.length, createdAt: now, updatedAt: now };
+    const sectionNames = includeStarterSections ? starterSections : ['Notes'];
+    const secs: Section[] = sectionNames.map((section, order) => ({ id: newId(), notebookId: notebook.id, name: section, order, createdAt: now, updatedAt: now }));
+
+    setOperationError(null);
     if (isCloudMode && supabase && user) {
       const { error: notebookError } = await supabase.from('notebooks').insert({ id: notebook.id, user_id: user.id, name: notebook.name, accent_color: notebook.accentColor, sort_order: notebook.order, created_at: now, updated_at: now });
       if (notebookError) throw notebookError;
@@ -300,12 +322,15 @@ export default function ObscribeApp() {
       });
     }
 
+    setShowNotebookModal(false);
     await refreshNotebooks();
     await refreshSections();
+    setShowTrash(false);
     setActiveNotebookId(notebook.id);
     setActiveSectionId(secs[0].id);
     setActivePageId(undefined);
   }
+
 
   async function createPage(sectionId = activeSectionId) {
     if (!activeNotebookId || !sectionId) return;
@@ -330,20 +355,25 @@ export default function ObscribeApp() {
 
     setPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     setSaveState('saving');
+    setOperationError(null);
 
-    try {
-    if (isCloudMode && supabase) {
-      const { error } = await supabase.from('pages').update({ title: updated.title, title_source: updated.titleSource, content: updated.content, plain_text: updated.plainText, tags: updated.tags, updated_at: updated.updatedAt }).eq('id', updated.id);
-      if (error) throw error;
-    } else {
-      await db.pages.put(updated);
-    }
-    setSaveState('saved');
-    } catch (error: unknown) {
-      setSaveState('error');
-      setOperationError(`Save failed: ${errorMessage(error)}`);
-    }
+    if (saveTimers.current[updated.id]) clearTimeout(saveTimers.current[updated.id]);
+    saveTimers.current[updated.id] = setTimeout(async () => {
+      try {
+        if (isCloudMode && supabase) {
+          const { error } = await supabase.from('pages').update({ title: updated.title, title_source: updated.titleSource, content: updated.content, plain_text: updated.plainText, tags: updated.tags, updated_at: updated.updatedAt }).eq('id', updated.id);
+          if (error) throw error;
+        } else {
+          await db.pages.put(updated);
+        }
+        setSaveState('saved');
+      } catch (error: unknown) {
+        setSaveState('error');
+        setOperationError(`Save failed: ${errorMessage(error)}`);
+      }
+    }, 750);
   }
+
 
   async function quickCapture() {
     try {
@@ -599,7 +629,7 @@ export default function ObscribeApp() {
     <main className="app" style={{ ['--accent' as string]: activeNotebook?.accentColor ?? colors[0] }}>
       <aside className="shelf">
         <div className="brand"><Sparkles size={18} /> Obscribe</div>
-        <button className="new" onClick={createNotebook}><Plus size={16} /> Notebook</button>
+        <button className="new" onClick={openNotebookModal}><Plus size={16} /> Notebook</button>
         <button className={showTrash ? "trash-toggle active" : "trash-toggle"} onClick={() => setShowTrash((value) => !value)}><Trash2 size={15} /> Trash {trashCount ? `(${trashCount})` : ""}</button>
         <div className="books">
           {notebooks.map((book) => (
@@ -629,6 +659,17 @@ export default function ObscribeApp() {
         <div className="capture"><Inbox size={17} /><input value={capture} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
         {operationError && <div className="operation-error">{operationError}</div>}
 
+        {!notebooks.length && !showTrash ? (
+          <section className="empty-workspace">
+            <div className="empty-workspace-card">
+              <div className="empty-icon"><BookOpen size={26} /></div>
+              <p className="eyebrow">Fresh workspace</p>
+              <h2>Create your first notebook</h2>
+              <p>Start from a clean notebook, then add sections and pages as your ideas take shape.</p>
+              <button className="new" onClick={openNotebookModal}><Plus size={16} /> New Notebook</button>
+            </div>
+          </section>
+        ) : <>
         <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => renameSection(section)}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}</nav>
 
         {showTrash ? (
@@ -654,7 +695,20 @@ export default function ObscribeApp() {
           </article>
         </div>
         )}
+        </>}
       </section>
+      {showNotebookModal && (
+        <div className="modal-backdrop" onMouseDown={() => setShowNotebookModal(false)}>
+          <section className="notebook-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <p className="eyebrow">New notebook</p>
+            <h2>Create a notebook</h2>
+            <label className="modal-field">Name<input value={newNotebookName} onChange={(event) => setNewNotebookName(event.target.value)} placeholder="Research, Projects, Ideas…" autoFocus /></label>
+            <div className="modal-field"><span>Accent color</span><div className="color-row">{colors.map((color) => <button key={color} className={color === newNotebookColor ? 'color-dot active' : 'color-dot'} style={{ background: color }} onClick={() => setNewNotebookColor(color)} aria-label={`Use ${color}`} />)}</div></div>
+            <label className="starter-toggle"><input type="checkbox" checked={includeStarterSections} onChange={(event) => setIncludeStarterSections(event.target.checked)} /> Add starter sections: Inbox, Journal, Projects, References</label>
+            <div className="modal-actions"><button className="ghost-button" onClick={() => setShowNotebookModal(false)}>Cancel</button><button className="new" onClick={createNotebook}><Plus size={16} /> Create Notebook</button></div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
