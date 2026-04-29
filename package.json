@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.1",
     "@tiptap/extension-placeholder": "latest",
     "@tiptap/extension-task-item": "latest",
     "@tiptap/extension-task-list": "latest",

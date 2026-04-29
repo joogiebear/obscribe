@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import MiniSearch from 'minisearch';
 import { nanoid } from 'nanoid';
 import { BookOpen, Inbox, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import AuthPanel from './AuthPanel';
 import { db } from '@/lib/db';
 import type { Notebook, PageRecord, Section } from '@/lib/types';
 import { emptyDoc, tagsFromText, textFromDoc, titleFromText } from '@/lib/doc';
@@ -216,6 +217,8 @@ export default function ObscribeApp() {
         </header>
 
         {query && <div className="results">{searchResults.length ? searchResults.map((result) => <button key={result.id} onClick={() => { const page = pages.find((p) => p.id === result.id); setActiveSectionId(page?.sectionId); setActivePageId(String(result.id)); setQuery(''); }}>{String(result.title)}</button>) : <p>No matches yet.</p>}</div>}
+
+        <AuthPanel />
 
         <div className="capture"><Inbox size={17} /><input value={capture} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
 

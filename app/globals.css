@@ -70,3 +70,15 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .prose-page .is-editor-empty:first-child::before { color: #a99a8d; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }
 @media (max-width: 900px) { .app { grid-template-columns: 1fr; } .shelf { position: static; } .notebook-layout { grid-template-columns: 1fr; } .pages-panel { border-right: 0; } .topbar { align-items: stretch; flex-direction: column; } .search input { min-width: 0; width: 100%; } }
 @media (max-width: 560px) { .workspace { padding: 14px; } .tabs { margin-inline: -14px; padding-left: 14px; padding-right: 14px; } .tab { padding: 9px 8px 9px 13px; font-size: 14px; } .tab-danger { width: 28px; height: 28px; } .capture { align-items: stretch; flex-wrap: wrap; } .capture input { min-width: 0; width: calc(100% - 32px); } .capture button { width: 100%; } .paper { padding: 24px 18px; } .prose-page { font-size: 16px; } }
+.auth-card { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,250,240,.74); padding: 14px; display: flex; justify-content: space-between; align-items: center; gap: 16px; box-shadow: 0 10px 30px rgba(48,38,24,.06); }
+.auth-card h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.02em; }
+.auth-card p { margin: 0; color: var(--muted); }
+.muted-card { background: rgba(255,255,255,.42); }
+.auth-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.auth-form label { border: 1px solid var(--line); background: rgba(255,255,255,.62); border-radius: 12px; padding: 9px 10px; display: flex; align-items: center; gap: 8px; }
+.auth-form input { border: 0; outline: 0; background: transparent; min-width: 170px; color: var(--ink); }
+.auth-form button:disabled { cursor: wait; opacity: .7; }
+.ghost-button, .link-button { border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.52); color: var(--ink); padding: 9px 11px; display: inline-flex; align-items: center; gap: 8px; }
+.link-button { border: 0; background: transparent; color: var(--accent); padding: 8px; }
+.auth-message { width: 100%; text-align: right; font-size: 14px; }
+@media (max-width: 760px) { .auth-card { align-items: stretch; flex-direction: column; } .auth-form { justify-content: stretch; } .auth-form label, .auth-form input, .auth-form .new, .ghost-button { width: 100%; } .auth-message { text-align: left; } }
