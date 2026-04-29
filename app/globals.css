@@ -193,3 +193,8 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .prose-page li[data-type="taskItem"] > div { min-width: 0; }
 .prose-page li[data-type="taskItem"] > div > p { margin-top: 0; }
 .prose-page li[data-type="taskItem"] input[type="checkbox"] { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] { display: flex !important; flex-direction: row !important; align-items: flex-start !important; gap: 10px !important; }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label { flex: 0 0 auto !important; display: flex !important; align-items: center !important; padding-top: 7px !important; margin: 0 !important; }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div { flex: 1 1 auto !important; min-width: 0 !important; display: block !important; }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p:first-child { margin-top: 0 !important; }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p:last-child { margin-bottom: 0 !important; }
