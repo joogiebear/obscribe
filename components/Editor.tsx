@@ -147,6 +147,16 @@ export default function Editor({ content, onChange }: Props) {
     setSlashOpen(false);
   }
 
+  function insertCallout(kind: 'note' | 'idea' | 'warning' | 'question') {
+    runSlash(() => {
+      editor?.chain().focus().insertContent({
+        type: 'callout',
+        attrs: { kind },
+        content: [{ type: 'paragraph' }]
+      }).run();
+    });
+  }
+
   function insertLink() {
     const previousUrl = editor?.getAttributes('link').href;
     const url = window.prompt('Paste a link URL', previousUrl || 'https://');
@@ -175,9 +185,9 @@ export default function Editor({ content, onChange }: Props) {
     { label: 'Table', aliases: ['grid', 'columns', 'rows'], icon: <Table2 size={16} />, action: () => runSlash(() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()) },
     { label: 'Link', aliases: ['url', 'anchor'], icon: <LinkIcon size={16} />, action: insertLink },
     { label: 'Image', aliases: ['picture', 'photo'], icon: <ImageIcon size={16} />, action: insertImage },
-    { label: 'Note callout', aliases: ['callout', 'note'], icon: <Sparkles size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'note' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] }).run()) },
-    { label: 'Idea callout', aliases: ['idea', 'lightbulb'], icon: <Lightbulb size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'idea' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Idea' }] }] }).run()) },
-    { label: 'Warning callout', aliases: ['warning', 'alert'], icon: <TriangleAlert size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'warning' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Warning' }] }] }).run()) }
+    { label: 'Note callout', aliases: ['callout', 'note'], icon: <Sparkles size={16} />, action: () => insertCallout('note') },
+    { label: 'Idea callout', aliases: ['idea', 'lightbulb'], icon: <Lightbulb size={16} />, action: () => insertCallout('idea') },
+    { label: 'Warning callout', aliases: ['warning', 'alert'], icon: <TriangleAlert size={16} />, action: () => insertCallout('warning') }
   ];
   const filteredSlashItems = slashItems.filter((item) => !slashQuery || item.label.toLowerCase().includes(slashQuery) || item.aliases.some((alias) => alias.includes(slashQuery)));
 
