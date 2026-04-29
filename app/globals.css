@@ -267,3 +267,10 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .settings-card .modal-field { color: #5d4d40; }
 .settings-card .modal-field input { color: var(--ink); background: rgba(255,255,255,.82); }
 .settings-card .modal-field input::placeholder { color: #9a8b7c; }
+.settings-card .modal-field select { width: 100%; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,.82); color: var(--ink); outline: none; padding: 11px 12px; }
+.settings-card .modal-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent), transparent 82%); }
+.settings-note { font-size: 13px; }
+.settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.settings-actions button { flex: 1 1 160px; }
+.ai-card { grid-column: span 2; }
+@media (max-width: 760px) { .ai-card { grid-column: auto; } }

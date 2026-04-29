@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { CreditCard, Database, KeyRound, LogIn, LogOut, Palette, Save, Settings, UserCircle, UserPlus, X } from 'lucide-react';
+import { CreditCard, Database, KeyRound, LogIn, LogOut, Palette, Save, Settings, Sparkles, Trash2, UserCircle, UserPlus, X } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 function avatarLabel(email?: string, name?: string) {
@@ -25,6 +25,15 @@ function accountName(user: User | null) {
   return email.includes('@') ? email.split('@')[0] : 'Obscribe user';
 }
 
+type AiProvider = 'openai' | 'anthropic' | 'google' | 'xai';
+
+const aiProviderLabels: Record<AiProvider, string> = {
+  openai: 'OpenAI / ChatGPT API',
+  anthropic: 'Anthropic / Claude API',
+  google: 'Google / Gemini API',
+  xai: 'xAI / Grok API'
+};
+
 export default function AuthPanel() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -35,6 +44,9 @@ export default function AuthPanel() {
   const [newPassword, setNewPassword] = useState('');
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [aiProvider, setAiProvider] = useState<AiProvider>('openai');
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [hasSavedAiKey, setHasSavedAiKey] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -50,6 +62,15 @@ export default function AuthPanel() {
     setDisplayName(userName(user));
     setAvatarUrl(userAvatar(user));
   }, [user]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const savedProvider = localStorage.getItem('obscribe-ai-provider') as AiProvider | null;
+    const savedKey = localStorage.getItem('obscribe-ai-api-key') ?? '';
+    if (savedProvider && savedProvider in aiProviderLabels) setAiProvider(savedProvider);
+    setAiApiKey(savedKey);
+    setHasSavedAiKey(Boolean(savedKey));
+  }, [settingsOpen]);
 
   async function saveProfile() {
     if (!supabase) return;
@@ -77,6 +98,22 @@ export default function AuthPanel() {
     }
     setNewPassword('');
     setSettingsMessage('Password updated.');
+  }
+
+  function saveAiSettings() {
+    localStorage.setItem('obscribe-ai-provider', aiProvider);
+    localStorage.setItem('obscribe-ai-api-key', aiApiKey.trim());
+    setHasSavedAiKey(Boolean(aiApiKey.trim()));
+    setSettingsMessage(`${aiProviderLabels[aiProvider]} saved on this device.`);
+  }
+
+  function clearAiSettings() {
+    localStorage.removeItem('obscribe-ai-provider');
+    localStorage.removeItem('obscribe-ai-api-key');
+    setAiProvider('openai');
+    setAiApiKey('');
+    setHasSavedAiKey(false);
+    setSettingsMessage('AI provider key removed from this device.');
   }
 
   async function signOut() {
@@ -160,6 +197,19 @@ export default function AuthPanel() {
                   <div className="settings-card-title"><Database size={18} /><h3>Workspace</h3></div>
                   <p>Your signed-in notebooks sync to Supabase. Signed-out workspaces stay local to this browser.</p>
                   <button className="ghost-button" disabled>Export data soon</button>
+                </section>
+
+                <section className="settings-card ai-card">
+                  <div className="settings-card-title"><Sparkles size={18} /><h3>AI provider</h3></div>
+                  <p>Bring your own API key for AI features. Usage is billed by your provider, not Obscribe.</p>
+                  <label className="modal-field">Provider
+                    <select value={aiProvider} onChange={(event) => setAiProvider(event.target.value as AiProvider)}>
+                      {Object.entries(aiProviderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => setAiApiKey(event.target.value)} placeholder={hasSavedAiKey ? 'Saved on this device' : 'Paste provider API key'} autoComplete="off" /></label>
+                  <p className="settings-note">Alpha note: this key is stored only in this browser’s local storage. We’ll move to encrypted server-side storage before team/shared AI features.</p>
+                  <div className="settings-actions"><button className="new" onClick={saveAiSettings} disabled={!aiApiKey.trim()}><Save size={16} /> Save AI key</button><button className="ghost-button" onClick={clearAiSettings} disabled={!hasSavedAiKey && !aiApiKey}><Trash2 size={16} /> Remove</button></div>
                 </section>
 
                 <section className="settings-card">
