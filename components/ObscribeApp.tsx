@@ -102,6 +102,7 @@ export default function ObscribeApp() {
   const [activePageId, setActivePageId] = useState<string>();
   const [query, setQuery] = useState('');
   const [capture, setCapture] = useState('');
+  const [operationError, setOperationError] = useState<string | null>(null);
 
   const isCloudMode = Boolean(user && supabase);
 
@@ -314,24 +315,42 @@ export default function ObscribeApp() {
   }
 
   async function quickCapture() {
-    if (!capture.trim() || !activeNotebookId) return;
-    const inbox = sections.find((s) => s.notebookId === activeNotebookId && s.name.toLowerCase() === 'inbox');
-    if (!inbox) return;
-    const now = new Date().toISOString();
-    const text = capture.trim();
-    const page: PageRecord = { id: newId(), notebookId: activeNotebookId, sectionId: inbox.id, title: text.slice(0, 80), titleSource: 'auto', pinned: false, order: pages.filter((p) => p.sectionId === inbox.id).length, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }, plainText: text, tags: tagsFromText(text), createdAt: now, updatedAt: now };
+    try {
+      setOperationError(null);
+      if (!capture.trim() || !activeNotebookId) return;
+      let inbox = sections.find((s) => s.notebookId === activeNotebookId && s.name.toLowerCase() === 'inbox');
+      const now = new Date().toISOString();
 
-    if (isCloudMode && supabase && user) {
-      const { error } = await supabase.from('pages').insert({ id: page.id, user_id: user.id, notebook_id: page.notebookId, section_id: page.sectionId, title: page.title, title_source: page.titleSource, pinned: page.pinned, sort_order: page.order, content: page.content, plain_text: page.plainText, tags: page.tags, created_at: now, updated_at: now });
-      if (error) throw error;
-    } else {
-      await db.pages.add(page);
+      if (!inbox) {
+        inbox = { id: newId(), notebookId: activeNotebookId, name: 'Inbox', order: 0, createdAt: now, updatedAt: now };
+        if (isCloudMode && supabase && user) {
+          const { error } = await supabase.from('sections').insert({ id: inbox.id, user_id: user.id, notebook_id: inbox.notebookId, name: inbox.name, sort_order: inbox.order, created_at: now, updated_at: now });
+          if (error) throw error;
+        } else {
+          await db.sections.add(inbox);
+        }
+        setSections((prev) => [...prev, inbox as Section]);
+        setActiveSectionId(inbox.id);
+      }
+
+      const text = capture.trim();
+      const page: PageRecord = { id: newId(), notebookId: activeNotebookId, sectionId: inbox.id, title: text.slice(0, 80), titleSource: 'auto', pinned: false, order: pages.filter((p) => p.sectionId === inbox.id).length, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }, plainText: text, tags: tagsFromText(text), createdAt: now, updatedAt: now };
+
+      if (isCloudMode && supabase && user) {
+        const { error } = await supabase.from('pages').insert({ id: page.id, user_id: user.id, notebook_id: page.notebookId, section_id: page.sectionId, title: page.title, title_source: page.titleSource, pinned: page.pinned, sort_order: page.order, content: page.content, plain_text: page.plainText, tags: page.tags, created_at: now, updated_at: now });
+        if (error) throw error;
+      } else {
+        await db.pages.add(page);
+      }
+
+      setCapture('');
+      await refreshSections();
+      await refreshPages();
+      setActiveSectionId(inbox.id);
+      setActivePageId(page.id);
+    } catch (error: unknown) {
+      setOperationError(`Capture failed: ${errorMessage(error)}`);
     }
-
-    setCapture('');
-    await refreshPages();
-    setActiveSectionId(inbox.id);
-    setActivePageId(page.id);
   }
 
   async function deletePage(page: PageRecord) {
@@ -428,6 +447,7 @@ export default function ObscribeApp() {
         <div className="sync-strip">{isCloudMode ? <><Cloud size={15} /> Signed in: saving this workspace to Supabase.</> : <><HardDrive size={15} /> Signed out: saving locally in this browser.</>}</div>
 
         <div className="capture"><Inbox size={17} /><input value={capture} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
+        {operationError && <div className="operation-error">{operationError}</div>}
 
         <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Delete ${section.name}`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}</nav>
 
