@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import MiniSearch from 'minisearch';
-import { BookOpen, CheckCircle2, Cloud, HardDrive, Inbox, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { BookOpen, CheckCircle2, Inbox, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
 import AuthPanel from './AuthPanel';
 import { db } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
@@ -586,6 +586,7 @@ export default function ObscribeApp() {
             </div>
           ))}
         </div>
+        <AuthPanel />
       </aside>
 
       <section className="workspace">
@@ -599,9 +600,7 @@ export default function ObscribeApp() {
 
         {query && <div className="results">{searchResults.length ? searchResults.map((result) => <button key={result.id} onClick={() => { const page = pages.find((p) => p.id === result.id); setActiveSectionId(page?.sectionId); setActivePageId(String(result.id)); setQuery(''); }}>{String(result.title)}</button>) : <p>No matches yet.</p>}</div>}
 
-        <AuthPanel />
-
-        <div className="sync-strip">{isCloudMode ? <><Cloud size={15} /> Cloud workspace</> : <><HardDrive size={15} /> Local browser workspace</>}<span className={`save-pill ${saveState}`}>{saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Ready'}</span></div>
+        <div className="sync-strip"><CheckCircle2 size={15} /> Page status <span className={`save-pill ${saveState}`}>{saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Ready'}</span></div>
 
         <div className="capture"><Inbox size={17} /><input value={capture} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
         {operationError && <div className="operation-error">{operationError}</div>}

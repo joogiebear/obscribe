@@ -6,6 +6,10 @@ import type { User } from '@supabase/supabase-js';
 import { LogIn, LogOut, UserPlus } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
+function avatarLabel(email?: string) {
+  return (email?.[0] ?? 'O').toUpperCase();
+}
+
 export default function AuthPanel() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -23,33 +27,49 @@ export default function AuthPanel() {
   async function signOut() {
     if (!supabase) return;
     await supabase.auth.signOut();
-    setMessage('Signed out. You are back to local-only mode on this device.');
+    setMessage('Local only on this device.');
   }
 
   if (!isSupabaseConfigured) {
     return (
-      <section className="account-strip muted-card">
-        <span>Accounts unlock after Supabase env vars are added.</span>
+      <section className="sidebar-account muted">
+        <div className="avatar">O</div>
+        <div className="account-copy">
+          <strong>Local only</strong>
+          <span>Supabase not configured</span>
+        </div>
       </section>
     );
   }
 
   if (user) {
     return (
-      <section className="account-strip">
-        <span><strong>{user.email}</strong> · Cloud Alpha enabled</span>
-        <button className="ghost-button compact" onClick={signOut}><LogOut size={15} /> Sign out</button>
+      <section className="sidebar-account">
+        <div className="account-main">
+          <div className="avatar">{avatarLabel(user.email)}</div>
+          <div className="account-copy">
+            <strong title={user.email}>{user.email}</strong>
+            <span>Cloud Alpha enabled</span>
+          </div>
+        </div>
+        <button className="sidebar-auth-button" onClick={signOut}><LogOut size={14} /> Sign out</button>
         {message && <small>{message}</small>}
       </section>
     );
   }
 
   return (
-    <section className="account-strip">
-      <span>Want early access sync later? Create an account.</span>
-      <div className="account-actions">
-        <button className="ghost-button compact" onClick={() => router.push('/auth?mode=sign-in')}><LogIn size={15} /> Sign in</button>
-        <button className="new compact" onClick={() => router.push('/auth?mode=register')}><UserPlus size={15} /> Register</button>
+    <section className="sidebar-account">
+      <div className="account-main">
+        <div className="avatar">O</div>
+        <div className="account-copy">
+          <strong>Local workspace</strong>
+          <span>Sign in for Cloud Alpha</span>
+        </div>
+      </div>
+      <div className="sidebar-auth-actions">
+        <button className="sidebar-auth-button" onClick={() => router.push('/auth?mode=sign-in')}><LogIn size={14} /> Sign in</button>
+        <button className="sidebar-auth-button primary" onClick={() => router.push('/auth?mode=register')}><UserPlus size={14} /> Register</button>
       </div>
     </section>
   );
