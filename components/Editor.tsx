@@ -50,7 +50,7 @@ const Callout = Node.create({
 const SimpleTodo = Node.create({
   name: 'simpleTodo',
   group: 'block',
-  content: 'inline*',
+  content: 'paragraph',
   defining: true,
   addAttributes() {
     return { checked: { default: false } };
@@ -208,7 +208,7 @@ export default function Editor({ content, onChange }: Props) {
 
   const slashItems = [
     { label: 'Heading', aliases: ['h2', 'title'], icon: <TextQuote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleHeading({ level: 2 }).run()) },
-    { label: 'Todo', aliases: ['task', 'checkbox', 'check'], icon: <ListTodo size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'simpleTodo' }).run()) },
+    { label: 'Todo', aliases: ['task', 'checkbox', 'check'], icon: <ListTodo size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'simpleTodo', content: [{ type: 'paragraph' }] }).run()) },
     { label: 'Quote', aliases: ['blockquote'], icon: <Quote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleBlockquote().run()) },
     { label: 'Divider', aliases: ['line', 'rule', 'hr'], icon: <Minus size={16} />, action: () => runSlash(() => editor?.chain().focus().setHorizontalRule().run()) },
     { label: 'Code block', aliases: ['code', 'pre', 'snippet'], icon: <Code2 size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleCodeBlock().run()) },

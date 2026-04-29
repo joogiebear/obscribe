@@ -216,3 +216,4 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .simple-todo-checkbox input { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
 .simple-todo-content { flex: 1 1 auto; min-width: 0; outline: none; }
 .simple-todo-row[data-checked="true"] .simple-todo-content { color: var(--muted); text-decoration: line-through; }
+.simple-todo-content > p { margin: 0 !important; }
