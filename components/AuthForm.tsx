@@ -34,8 +34,9 @@ export default function AuthForm() {
     setBusy(true);
     setMessage(null);
     const credentials = { email: email.trim(), password };
+    const emailRedirectTo = `${window.location.origin}/auth?mode=sign-in`;
     const result = mode === 'register'
-      ? await supabase.auth.signUp(credentials)
+      ? await supabase.auth.signUp({ ...credentials, options: { emailRedirectTo } })
       : await supabase.auth.signInWithPassword(credentials);
     setBusy(false);
 
