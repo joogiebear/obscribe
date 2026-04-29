@@ -442,14 +442,12 @@ export default function ObscribeApp() {
     const savedPage = saved.pageId ? pgs.find((page) => page.id === saved.pageId) : undefined;
     const savedSection = saved.sectionId ? secs.find((section) => section.id === saved.sectionId) : undefined;
     const savedNotebook = saved.notebookId ? books.find((notebook) => notebook.id === saved.notebookId) : undefined;
-    const firstBook = savedPage ? books.find((book) => book.id === savedPage.notebookId) : savedSection ? books.find((book) => book.id === savedSection.notebookId) : savedNotebook ?? books[0];
-    const bookPages = pgs.filter((page) => page.notebookId === firstBook?.id);
-    const bookSections = secs.filter((section) => section.notebookId === firstBook?.id);
-    const firstPage = savedPage?.notebookId === firstBook?.id ? savedPage : bookPages[0];
-    const firstSection = firstPage ? bookSections.find((section) => section.id === firstPage.sectionId) : savedSection?.notebookId === firstBook?.id ? savedSection : bookSections[0];
-    const selectedPage = firstPage?.sectionId === firstSection?.id ? firstPage : pgs.find((page) => page.sectionId === firstSection?.id);
-    setActiveNotebookId(firstBook?.id);
-    setActiveSectionId(firstSection?.id);
+    const selectedBook = savedSection ? books.find((book) => book.id === savedSection.notebookId) : savedPage ? books.find((book) => book.id === savedPage.notebookId) : savedNotebook ?? books[0];
+    const bookSections = secs.filter((section) => section.notebookId === selectedBook?.id);
+    const selectedSection = savedSection?.notebookId === selectedBook?.id ? savedSection : savedPage ? bookSections.find((section) => section.id === savedPage.sectionId) : bookSections[0];
+    const selectedPage = savedPage?.sectionId === selectedSection?.id ? savedPage : pgs.find((page) => page.sectionId === selectedSection?.id);
+    setActiveNotebookId(selectedBook?.id);
+    setActiveSectionId(selectedSection?.id);
     setActivePageId(selectedPage?.id);
   }
 
