@@ -32,6 +32,37 @@ const aiLimits = {
   summarizeChars: 8_000
 };
 
+const aiSummaryCacheKey = 'obscribe-ai-summary-cache';
+
+type CachedSummary = { pageId: string; summary: string; createdAt: string; pageUpdatedAt: string };
+
+function readSummaryCache(): Record<string, CachedSummary> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(aiSummaryCacheKey);
+    return raw ? JSON.parse(raw) as Record<string, CachedSummary> : {};
+  } catch {
+    localStorage.removeItem(aiSummaryCacheKey);
+    return {};
+  }
+}
+
+function writeSummaryCache(cache: Record<string, CachedSummary>) {
+  localStorage.setItem(aiSummaryCacheKey, JSON.stringify(cache));
+}
+
+function cacheSummary(page: PageRecord, summary: string) {
+  const cache = readSummaryCache();
+  cache[page.id] = { pageId: page.id, summary, createdAt: new Date().toISOString(), pageUpdatedAt: page.updatedAt };
+  writeSummaryCache(cache);
+}
+
+function clearCachedSummary(pageId: string) {
+  const cache = readSummaryCache();
+  delete cache[pageId];
+  writeSummaryCache(cache);
+}
+
 function jsonBytes(value: unknown) {
   return new TextEncoder().encode(JSON.stringify(value)).length;
 }
@@ -387,7 +418,9 @@ export default function ObscribeApp() {
   const activePageIsBlank = Boolean(activePage && !activePage.plainText.trim());
 
   useEffect(() => {
-    setAiSummary('');
+    if (!activePageId) { setAiSummary(''); return; }
+    const cached = readSummaryCache()[activePageId];
+    setAiSummary(cached?.summary ?? '');
   }, [activePageId]);
 
   const searchResults = useMemo(() => {
@@ -631,7 +664,9 @@ export default function ObscribeApp() {
       });
       const payload = await response.json().catch(() => ({})) as { summary?: string; error?: string };
       if (!response.ok) throw new Error(payload.error || 'Could not summarize this page.');
-      setAiSummary(payload.summary || 'No summary returned.');
+      const summary = payload.summary || 'No summary returned.';
+      setAiSummary(summary);
+      cacheSummary(activePage, summary);
     } catch (error: unknown) {
       setOperationError(errorMessage(error));
     } finally {
@@ -648,6 +683,7 @@ export default function ObscribeApp() {
       onConfirm: async () => {
         await persistPageContent(activePage, summaryDoc(aiSummary), 'manual');
         setAiSummary('');
+        clearCachedSummary(activePage.id);
       }
     });
   }
@@ -657,6 +693,7 @@ export default function ObscribeApp() {
     try {
       await persistPageContent(activePage, appendSummaryDoc(activePage, aiSummary), activePage.titleSource);
       setAiSummary('');
+      clearCachedSummary(activePage.id);
     } catch (error: unknown) {
       setSaveState('error');
       setOperationError(`Couldn’t append summary: ${errorMessage(error)}`);
@@ -1031,7 +1068,7 @@ export default function ObscribeApp() {
           <article className="paper">
             {activePage ? <>
               <div className="paper-header"><div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div><div className="ai-actions"><button className="ai-action" onClick={summarizeActivePage} disabled={aiBusy || !activePage.plainText.trim() || activePage.plainText.length > aiLimits.summarizeChars}><Sparkles size={15} /> {aiBusy ? 'Summarizing…' : 'Summarize'}</button><small>Low-cost summary · max {aiLimits.summarizeChars.toLocaleString()} chars</small></div></div>
-              {aiSummary && <section className="ai-result"><p className="eyebrow">AI summary</p><div>{aiSummary}</div><div className="ai-result-actions"><button className="ghost-button compact" onClick={appendSummaryToPage}>Append summary</button><button className="new compact" onClick={replacePageWithSummary}>Replace page with summary</button></div></section>}
+              {aiSummary && <section className="ai-result"><p className="eyebrow">AI summary · saved draft</p><div>{aiSummary}</div><div className="ai-result-actions"><button className="ghost-button compact" onClick={() => { if (activePage) clearCachedSummary(activePage.id); setAiSummary(''); }}>Dismiss</button><button className="ghost-button compact" onClick={appendSummaryToPage}>Append summary</button><button className="new compact" onClick={replacePageWithSummary}>Replace page with summary</button></div></section>}
               {activePageIsBlank && <div className="starter-inserts" aria-label="Page starters">
                 <span>Start with</span>
                 {starterPageOptions.map((option) => {

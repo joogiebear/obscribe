@@ -392,6 +392,13 @@ export default function AuthPanel() {
                 </section>
 
                 <section className="settings-card">
+                  <div className="settings-card-title"><Sparkles size={18} /><h3>AI usage safety</h3></div>
+                  <p>Summaries use your synced provider key and are intentionally capped for alpha.</p>
+                  <p><strong>Current guardrails:</strong> max 8,000 page characters, short output, and one explicit click per summary.</p>
+                  <p>Generated summaries are saved as local drafts until you append, replace, or dismiss them, so a refresh does not waste the request.</p>
+                </section>
+
+                <section className="settings-card">
                   <div className="settings-card-title"><Database size={18} /><h3>Workspace</h3></div>
                   <p>Your signed-in notebooks sync to Supabase. Signed-out workspaces stay local to this browser.</p>
                   <button className="ghost-button" disabled>Export data soon</button>
