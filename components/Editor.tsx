@@ -67,8 +67,8 @@ export default function Editor({ content, onChange }: Props) {
       TableHeader,
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
+      TaskList.configure({ HTMLAttributes: { class: 'obscribe-task-list' } }),
+      TaskItem.configure({ nested: true, HTMLAttributes: { class: 'obscribe-task-item' } }),
       Callout,
       Placeholder.configure({ placeholder: 'Start writing. Try / for blocks, #tags, or [[page links]] soon…' })
     ],
