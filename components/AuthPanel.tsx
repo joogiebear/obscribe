@@ -23,7 +23,7 @@ export default function AuthPanel() {
   async function signOut() {
     if (!supabase) return;
     await supabase.auth.signOut();
-    setMessage('Signed out. Notes remain local on this device.');
+    setMessage('Signed out. You are back to local-only mode on this device.');
   }
 
   if (!isSupabaseConfigured) {
@@ -37,7 +37,7 @@ export default function AuthPanel() {
   if (user) {
     return (
       <section className="account-strip">
-        <span><strong>{user.email}</strong> · local notes only for now</span>
+        <span><strong>{user.email}</strong> · Cloud Alpha enabled</span>
         <button className="ghost-button compact" onClick={signOut}><LogOut size={15} /> Sign out</button>
         {message && <small>{message}</small>}
       </section>
