@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import MiniSearch from 'minisearch';
-import { BookOpen, CalendarDays, CheckCircle2, Inbox, ListTodo, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { BookOpen, CalendarDays, CheckCircle2, Command, Download, Inbox, ListTodo, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
 import AuthPanel from './AuthPanel';
 import { db } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import type { Notebook, PageRecord, Section } from '@/lib/types';
-import { emptyDoc, tagsFromText, textFromDoc, titleFromText } from '@/lib/doc';
+import { emptyDoc, markdownFromDoc, tagsFromText, textFromDoc, titleFromText, wikiLinksFromText } from '@/lib/doc';
 import type { JSONContent } from '@tiptap/react';
 import type { User } from '@supabase/supabase-js';
 
@@ -74,6 +74,32 @@ function writeWorkspaceCache(scope: string, cache: WorkspaceCache) {
   } catch {
     // Ignore storage failures; the live workspace still loads normally.
   }
+}
+
+function savedLabel(value: string | null) {
+  if (!value) return 'Ready';
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 5) return 'Saved just now';
+  if (seconds < 60) return `Saved ${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `Saved ${minutes}m ago`;
+  return 'Saved earlier';
+}
+
+function downloadText(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function safeFilename(value: string) {
+  return (value || 'Untitled').replace(/[^a-z0-9-_ ]/gi, '').trim().replace(/\s+/g, '-').toLowerCase() || 'untitled';
 }
 
 type CachedSummary = { pageId: string; summary: string; createdAt: string; pageUpdatedAt: string };
@@ -305,6 +331,7 @@ export default function ObscribeApp() {
   const [capture, setCapture] = useState('');
   const [operationError, setOperationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [trashLoaded, setTrashLoaded] = useState(false);
   const [trashLoading, setTrashLoading] = useState(false);
@@ -317,6 +344,8 @@ export default function ObscribeApp() {
   const [includeStarterSections, setIncludeStarterSections] = useState(true);
   const [showSectionModal, setShowSectionModal] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
   const [renameModal, setRenameModal] = useState<{ kind: 'notebook' | 'section' | 'page'; id: string; title: string; label: string; value: string } | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [aiSummary, setAiSummary] = useState('');
@@ -385,6 +414,30 @@ export default function ObscribeApp() {
     if (!ready || !activeNotebookId) return;
     writeActiveSelection({ notebookId: activeNotebookId, sectionId: activeSectionId, pageId: activePageId });
   }, [ready, activeNotebookId, activeSectionId, activePageId]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const commandKey = event.metaKey || event.ctrlKey;
+      if (!commandKey) return;
+      const key = event.key.toLowerCase();
+      if (key === 'k') {
+        event.preventDefault();
+        setCommandOpen(true);
+        setCommandQuery('');
+      }
+      if (key === 'n') {
+        event.preventDefault();
+        if (event.shiftKey) openNotebookModal();
+        else createPage();
+      }
+      if (event.shiftKey && key === 'e') {
+        event.preventDefault();
+        exportActivePage();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeNotebookId, activeSectionId, activePageId]);
 
   useEffect(() => {
     if (!showTrash || trashLoaded || trashLoading) return;
@@ -514,6 +567,41 @@ export default function ObscribeApp() {
     return mini.search(query, { prefix: true, fuzzy: 0.2 }).slice(0, 8);
   }, [pages, query]);
 
+  const activeWikiLinks = useMemo(() => wikiLinksFromText(activePage?.plainText ?? ''), [activePage?.plainText]);
+  const commandPageResults = useMemo(() => {
+    const term = commandQuery.trim().toLowerCase();
+    if (!term) return pages.slice(0, 6);
+    return pages.filter((page) => `${page.title} ${page.plainText} ${page.tags.join(' ')}`.toLowerCase().includes(term)).slice(0, 6);
+  }, [commandQuery, pages]);
+
+  function openPage(page: PageRecord) {
+    setShowTrash(false);
+    setActiveNotebookId(page.notebookId);
+    setActiveSectionId(page.sectionId);
+    setActivePageId(page.id);
+    setCommandOpen(false);
+    setCommandQuery('');
+    setQuery('');
+  }
+
+  async function openOrCreateWikiPage(title: string) {
+    const existing = pages.find((page) => page.title.toLowerCase() === title.toLowerCase());
+    if (existing) { openPage(existing); return; }
+    await createPage(activeSectionId, title);
+  }
+
+  function exportActivePage() {
+    if (!activePage) return;
+    downloadText(`${safeFilename(activePage.title)}.md`, `# ${activePage.title}\n\n${markdownFromDoc(activePage.content)}\n`);
+  }
+
+  function exportNotebook() {
+    if (!activeNotebook) return;
+    const bookPages = pages.filter((page) => page.notebookId === activeNotebook.id);
+    const body = bookPages.map((page) => `# ${page.title}\n\n${markdownFromDoc(page.content)}`).join('\n\n---\n\n');
+    downloadText(`${safeFilename(activeNotebook.name)}-notebook.md`, body || `# ${activeNotebook.name}\n`);
+  }
+
   const refreshPages = async () => {
     if (isCloudMode && supabase) {
       const { data, error } = await supabase.from('pages').select('*').is('trashed_at', null).order('sort_order');
@@ -582,11 +670,12 @@ export default function ObscribeApp() {
   }
 
 
-  async function createPage(sectionId = activeSectionId) {
+  async function createPage(sectionId = activeSectionId, title = 'Untitled') {
     if (!activeNotebookId || !sectionId) return;
     if (pages.length >= alphaLimits.pages) { setOperationError(`Page limit reached (${alphaLimits.pages}).`); return; }
     const now = new Date().toISOString();
-    const page: PageRecord = { id: newId(), notebookId: activeNotebookId, sectionId, title: 'Untitled', titleSource: 'untitled', pinned: false, order: pages.filter((p) => p.sectionId === sectionId).length, content: emptyDoc, plainText: '', tags: [], createdAt: now, updatedAt: now };
+    const cleanTitle = title.trim().slice(0, alphaLimits.pageTitleChars) || 'Untitled';
+    const page: PageRecord = { id: newId(), notebookId: activeNotebookId, sectionId, title: cleanTitle, titleSource: cleanTitle === 'Untitled' ? 'untitled' : 'manual', pinned: false, order: pages.filter((p) => p.sectionId === sectionId).length, content: emptyDoc, plainText: '', tags: [], createdAt: now, updatedAt: now };
 
     if (isCloudMode && supabase && user) {
       const { error } = await supabase.from('pages').insert({ id: page.id, user_id: user.id, notebook_id: page.notebookId, section_id: page.sectionId, title: page.title, title_source: page.titleSource, pinned: page.pinned, sort_order: page.order, content: page.content, plain_text: page.plainText, tags: page.tags, created_at: now, updated_at: now });
@@ -623,6 +712,7 @@ export default function ObscribeApp() {
           await db.pages.put(updated);
         }
         setSaveState('saved');
+        setLastSavedAt(new Date().toISOString());
       } catch (error: unknown) {
         setSaveState('error');
         setOperationError(`Save failed: ${errorMessage(error)}`);
@@ -651,6 +741,7 @@ export default function ObscribeApp() {
       await db.pages.put(updated);
     }
     setSaveState('saved');
+    setLastSavedAt(new Date().toISOString());
   }
 
   async function applyStarterPage(page: PageRecord, kind: StarterPageKind) {
@@ -680,6 +771,7 @@ export default function ObscribeApp() {
         await db.pages.put(updated);
       }
       setSaveState('saved');
+      setLastSavedAt(new Date().toISOString());
     } catch (error: unknown) {
       setSaveState('error');
       setOperationError(`Couldn’t set up that page: ${errorMessage(error)}`);
@@ -927,6 +1019,7 @@ export default function ObscribeApp() {
         await db.pages.update(page.id, { title, titleSource: 'manual', updatedAt });
       }
       setSaveState('saved');
+      setLastSavedAt(new Date().toISOString());
     } catch (error: unknown) {
       setSaveState('error');
       setOperationError(`Title save failed: ${errorMessage(error)}`);
@@ -1159,12 +1252,12 @@ export default function ObscribeApp() {
             <p className="eyebrow">{isCloudMode ? 'Cloud Alpha' : 'Local Alpha'}</p>
             <h1>{activeNotebook?.name}</h1>
           </div>
-          <label className="search"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notes…" /></label>
+          <div className="topbar-actions"><button className="ghost-button compact" onClick={() => { setCommandOpen(true); setCommandQuery(''); }}><Command size={14} /> Commands</button><label className="search"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notes…" /></label></div>
         </header>
 
         {query && <div className="results">{searchResults.length ? searchResults.map((result) => <button key={result.id} onClick={() => { const page = pages.find((p) => p.id === result.id); setActiveSectionId(page?.sectionId); setActivePageId(String(result.id)); setQuery(''); }}>{String(result.title)}</button>) : <p>No matches yet.</p>}</div>}
 
-        <div className="sync-strip"><CheckCircle2 size={15} /> Page status <span className={`save-pill ${saveState}`}>{refreshingWorkspace ? 'Refreshing…' : saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Ready'}</span></div>
+        <div className="sync-strip"><CheckCircle2 size={15} /> Page status <span className={`save-pill ${saveState}`}>{refreshingWorkspace ? 'Refreshing…' : saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? savedLabel(lastSavedAt) : savedLabel(lastSavedAt)}</span></div>
 
         <div className="capture"><Inbox size={17} /><input value={capture} maxLength={alphaLimits.quickCaptureChars} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
         {operationError && <div className="operation-error">{operationError}</div>}
@@ -1180,7 +1273,7 @@ export default function ObscribeApp() {
             </div>
           </section>
         ) : <>
-        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => openRenameModal({ kind: 'section', id: section.id, title: 'Rename tab', label: 'Tab name', value: section.name })}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}<button className="tab-add" onClick={() => { setNewSectionName(''); setShowSectionModal(true); }}><Plus size={14} /> Tab</button></nav>
+        <nav className="tabs">{notebookSections.map((section) => { const count = pages.filter((page) => page.sectionId === section.id).length; return <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}><span>{section.name}</span><small>{count ? `${count} page${count === 1 ? '' : 's'}` : 'empty'}</small></button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => openRenameModal({ kind: 'section', id: section.id, title: 'Rename tab', label: 'Tab name', value: section.name })}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>; })}<button className="tab-add" onClick={() => { setNewSectionName(''); setShowSectionModal(true); }}><Plus size={14} /> Tab</button></nav>
 
         {showTrash ? (
           <section className="trash-panel">
@@ -1200,8 +1293,9 @@ export default function ObscribeApp() {
 
           <article className="paper">
             {activePage ? <>
-              <div className="paper-header"><div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div><div className="ai-actions"><button className="ai-action" onClick={summarizeActivePage} disabled={aiBusy || !activePage.plainText.trim() || activePage.plainText.length > aiLimits.summarizeChars}><Sparkles size={15} /> {aiBusy ? 'Summarizing…' : 'Summarize'}</button><small>Low-cost summary · max {aiLimits.summarizeChars.toLocaleString()} chars</small></div></div>
+              <div className="paper-header"><div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div><div className="ai-actions"><div className="paper-tools"><button className="ghost-button compact" onClick={exportActivePage}><Download size={14} /> Export</button><button className="ai-action" onClick={summarizeActivePage} disabled={aiBusy || !activePage.plainText.trim() || activePage.plainText.length > aiLimits.summarizeChars}><Sparkles size={15} /> {aiBusy ? 'Summarizing…' : 'Summarize'}</button></div><small>Low-cost summary · max {aiLimits.summarizeChars.toLocaleString()} chars</small></div></div>
               {aiSummary && <section className="ai-result"><p className="eyebrow">AI summary · saved draft</p><div>{aiSummary}</div><div className="ai-result-actions"><button className="ghost-button compact" onClick={() => { if (activePage) clearCachedSummary(activePage.id); setAiSummary(''); }}>Dismiss</button><button className="ghost-button compact" onClick={appendSummaryToPage}>Append summary</button><button className="new compact" onClick={replacePageWithSummary}>Replace page with summary</button></div></section>}
+              {!!activeWikiLinks.length && <section className="wiki-links"><p className="eyebrow">Page links</p>{activeWikiLinks.map((title) => { const exists = pages.some((page) => page.title.toLowerCase() === title.toLowerCase()); return <button key={title} onClick={() => openOrCreateWikiPage(title)}>{exists ? 'Open' : 'Create'} [[{title}]]</button>; })}</section>}
               {activePageIsBlank && <div className="starter-inserts" aria-label="Page starters">
                 <span>Start with</span>
                 {starterPageOptions.map((option) => {
@@ -1223,6 +1317,15 @@ export default function ObscribeApp() {
             <h2>{confirmModal.title}</h2>
             <p>{confirmModal.body}</p>
             <div className="modal-actions"><button className="ghost-button" onClick={() => setConfirmModal(null)}>Cancel</button><button className={confirmModal.destructive ? 'danger-button' : 'new'} onClick={runConfirmAction}>{confirmModal.confirmLabel}</button></div>
+          </section>
+        </div>
+      )}
+      {commandOpen && (
+        <div className="modal-backdrop" onMouseDown={() => setCommandOpen(false)}>
+          <section className="command-palette" onMouseDown={(event) => event.stopPropagation()}>
+            <label className="command-search"><Command size={18} /><input value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Search pages or run a command…" autoFocus onKeyDown={(event) => { if (event.key === 'Escape') setCommandOpen(false); }} /></label>
+            <div className="command-section"><p>Actions</p><button onClick={() => { setCommandOpen(false); createPage(); }}><Plus size={15} /> New page <span>⌘N</span></button><button onClick={() => { setCommandOpen(false); openNotebookModal(); }}><BookOpen size={15} /> New notebook <span>⇧⌘N</span></button><button disabled={!activePage} onClick={() => { setCommandOpen(false); exportActivePage(); }}><Download size={15} /> Export page <span>⇧⌘E</span></button><button disabled={!activeNotebook} onClick={() => { setCommandOpen(false); exportNotebook(); }}><Download size={15} /> Export notebook</button><button disabled={!activePage} onClick={() => { setCommandOpen(false); summarizeActivePage(); }}><Sparkles size={15} /> Summarize page</button></div>
+            <div className="command-section"><p>Pages</p>{commandPageResults.length ? commandPageResults.map((page) => <button key={page.id} onClick={() => openPage(page)}><span>{page.title}</span><small>{sections.find((section) => section.id === page.sectionId)?.name ?? 'Page'}</small></button>) : <small className="command-empty">No matching pages.</small>}</div>
           </section>
         </div>
       )}
