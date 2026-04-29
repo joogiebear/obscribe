@@ -768,6 +768,27 @@ export default function ObscribeApp() {
     setSections((prev) => prev.map((item) => item.id === section.id ? { ...item, name, updatedAt } : item));
   }
 
+  async function createSection() {
+    if (!activeNotebookId) return;
+    if (sections.length >= alphaLimits.sections) { setOperationError(`Section limit reached (${alphaLimits.sections}).`); return; }
+    const name = (prompt('New tab name', 'Notes')?.trim() || '').slice(0, alphaLimits.notebookNameChars);
+    if (!name) return;
+    const now = new Date().toISOString();
+    const section: Section = { id: newId(), notebookId: activeNotebookId, name, order: notebookSections.length, createdAt: now, updatedAt: now };
+
+    setOperationError(null);
+    if (isCloudMode && supabase && user) {
+      const { error } = await supabase.from('sections').insert({ id: section.id, user_id: user.id, notebook_id: section.notebookId, name: section.name, sort_order: section.order, created_at: now, updated_at: now });
+      if (error) { setOperationError(`Couldn’t create tab: ${error.message}`); return; }
+    } else {
+      await db.sections.add(section);
+    }
+
+    setSections((prev) => [...prev, section]);
+    setActiveSectionId(section.id);
+    setActivePageId(undefined);
+  }
+
   async function renamePage(page: PageRecord) {
     const title = prompt('Rename page', page.title)?.trim();
     if (!title || title === page.title) return;
@@ -1048,7 +1069,7 @@ export default function ObscribeApp() {
             </div>
           </section>
         ) : <>
-        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => renameSection(section)}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}</nav>
+        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => renameSection(section)}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}<button className="tab-add" onClick={createSection}><Plus size={14} /> Tab</button></nav>
 
         {showTrash ? (
           <section className="trash-panel">

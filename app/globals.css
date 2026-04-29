@@ -41,6 +41,8 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .tab-wrap.active { background: var(--paper); color: var(--ink); border-top: 3px solid var(--accent); }
 .tab { border: 0; background: transparent; color: inherit; padding: 11px 12px 11px 18px; }
 .tab-wrap.active .tab { padding-top: 9px; }
+.tab-add { border: 1px dashed color-mix(in srgb, var(--accent), var(--line) 45%); border-bottom: 0; border-radius: 14px 14px 0 0; background: rgba(255,250,240,.42); color: var(--accent); padding: 10px 14px; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; transform: translateY(1px); font-weight: 750; }
+.tab-add:hover { background: var(--paper); border-style: solid; }
 .notebook-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 190px); }
 .pages-panel { border-right: 1px solid var(--line); background: #eee4d5; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .page-create { width: 100%; margin-bottom: 6px; background: #3a332c; box-shadow: none; }
