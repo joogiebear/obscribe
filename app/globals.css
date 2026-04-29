@@ -198,3 +198,9 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div { flex: 1 1 auto !important; min-width: 0 !important; display: block !important; }
 .prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p:first-child { margin-top: 0 !important; }
 .prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p:last-child { margin-bottom: 0 !important; }
+.prose-page ul[data-type="taskList"] { list-style: none !important; padding-left: 0 !important; }
+.prose-page li.task-item-row { display: flex !important; flex-direction: row !important; align-items: flex-start !important; gap: 10px !important; list-style: none !important; }
+.prose-page .task-checkbox-wrap { flex: 0 0 auto !important; padding-top: 7px !important; margin: 0 !important; line-height: 1 !important; }
+.prose-page .task-item-content { flex: 1 1 auto !important; min-width: 0 !important; }
+.prose-page .task-item-content > p:first-child { margin-top: 0 !important; }
+.prose-page .task-item-content > p:last-child { margin-bottom: 0 !important; }
