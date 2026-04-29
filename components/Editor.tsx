@@ -61,7 +61,6 @@ export default function Editor({ content, onChange }: Props) {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
   const [slashPosition, setSlashPosition] = useState({ top: 10, left: 8, placement: 'below' as 'below' | 'above' });
-  const [slashFrom, setSlashFrom] = useState<number | null>(null);
   const [inputModal, setInputModal] = useState<{ kind: 'link' | 'image'; title: string; placeholder: string } | null>(null);
   const [inputValue, setInputValue] = useState('');
 
@@ -92,14 +91,13 @@ export default function Editor({ content, onChange }: Props) {
           const spaceBelow = window.innerHeight - coords.bottom;
           const placement = spaceBelow < 280 ? 'above' : 'below';
           setSlashPosition({ top: (placement === 'above' ? coords.top : coords.bottom) - editorBox.top + (placement === 'above' ? -8 : 8), left: Math.max(0, coords.left - editorBox.left), placement });
-          setSlashFrom(to - 1);
           setSlashQuery('');
           setSlashOpen(true);
         }
         return false;
       },
       handleKeyDown(_view, event) {
-        if (event.key === 'Escape') { setSlashOpen(false); setSlashFrom(null); setSlashQuery(''); }
+        if (event.key === 'Escape') { setSlashOpen(false); setSlashQuery(''); }
         return false;
       }
     },
@@ -109,28 +107,17 @@ export default function Editor({ content, onChange }: Props) {
   useEffect(() => {
     if (!editor) return;
     const updateSlashQuery = () => {
-      if (!slashOpen || slashFrom === null) return;
-      const cursor = editor.state.selection.from;
-      if (cursor < slashFrom) {
-        setSlashOpen(false);
-        setSlashFrom(null);
-        setSlashQuery('');
-        return;
-      }
-      const text = editor.state.doc.textBetween(slashFrom + 1, cursor, undefined, '\ufffc');
-      if (/\s/.test(text)) {
-        setSlashOpen(false);
-        setSlashFrom(null);
-        setSlashQuery('');
-        return;
-      }
-      setSlashQuery(text.toLowerCase());
+      if (!slashOpen) return;
+      const range = slashRange();
+      if (!range) return;
+      setSlashQuery(range.query.toLowerCase());
     };
     editor.on('transaction', updateSlashQuery);
     return () => {
       editor.off('transaction', updateSlashQuery);
     };
-  }, [editor, slashFrom, slashOpen]);
+  }, [editor, slashOpen]);
+
 
   useEffect(() => {
     if (!editor) return;
@@ -140,13 +127,17 @@ export default function Editor({ content, onChange }: Props) {
   }, [content, editor]);
 
   function slashRange() {
-    if (!editor || slashFrom === null) return null;
-    const cursor = editor.state.selection.from;
-    if (cursor < slashFrom) return null;
-    const query = editor.state.doc.textBetween(slashFrom + 1, cursor, undefined, '\ufffc');
+    if (!editor) return null;
+    const { $from } = editor.state.selection;
+    const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
+    const slashIndex = textBefore.lastIndexOf('/');
+    if (slashIndex < 0) return null;
+    const query = textBefore.slice(slashIndex + 1);
     if (/\s/.test(query)) return null;
-    return { from: slashFrom, to: cursor };
+    const from = $from.pos - (textBefore.length - slashIndex);
+    return { from, to: $from.pos, query };
   }
+
 
   function runSlash(action: () => void) {
     if (!editor) return;
@@ -154,7 +145,6 @@ export default function Editor({ content, onChange }: Props) {
     if (range) editor.chain().focus().deleteRange(range).run();
     action();
     setSlashOpen(false);
-    setSlashFrom(null);
     setSlashQuery('');
   }
 
