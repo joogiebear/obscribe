@@ -62,6 +62,8 @@ export default function Editor({ content, onChange }: Props) {
   const [slashQuery, setSlashQuery] = useState('');
   const [slashPosition, setSlashPosition] = useState({ top: 10, left: 8, placement: 'below' as 'below' | 'above' });
   const [slashFrom, setSlashFrom] = useState<number | null>(null);
+  const [inputModal, setInputModal] = useState<{ kind: 'link' | 'image'; title: string; placeholder: string } | null>(null);
+  const [inputValue, setInputValue] = useState('');
 
   const editor = useEditor({
     extensions: [
@@ -166,23 +168,32 @@ export default function Editor({ content, onChange }: Props) {
     });
   }
 
-  function insertLink() {
-    const previousUrl = editor?.getAttributes('link').href;
-    const url = window.prompt('Paste a link URL', previousUrl || 'https://');
-    if (!url) return;
-    runSlash(() => {
-      if (editor?.state.selection.empty) {
-        editor?.chain().focus().insertContent({ type: 'text', text: url, marks: [{ type: 'link', attrs: { href: url } }] }).run();
-      } else {
-        editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-      }
+  function openInputModal(kind: 'link' | 'image') {
+    setInputValue(kind === 'link' ? (editor?.getAttributes('link').href || 'https://') : '');
+    setInputModal({
+      kind,
+      title: kind === 'link' ? 'Insert link' : 'Insert image',
+      placeholder: kind === 'link' ? 'https://example.com' : 'https://example.com/image.png'
     });
   }
 
-  function insertImage() {
-    const url = window.prompt('Paste an image URL');
+  function submitInputModal() {
+    if (!inputModal) return;
+    const url = inputValue.trim();
     if (!url) return;
-    runSlash(() => editor?.chain().focus().setImage({ src: url }).run());
+    if (inputModal.kind === 'link') {
+      runSlash(() => {
+        if (editor?.state.selection.empty) {
+          editor?.chain().focus().insertContent({ type: 'text', text: url, marks: [{ type: 'link', attrs: { href: url } }] }).run();
+        } else {
+          editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+        }
+      });
+    } else {
+      runSlash(() => editor?.chain().focus().setImage({ src: url }).run());
+    }
+    setInputModal(null);
+    setInputValue('');
   }
 
   const slashItems = [
@@ -192,8 +203,8 @@ export default function Editor({ content, onChange }: Props) {
     { label: 'Divider', aliases: ['line', 'rule', 'hr'], icon: <Minus size={16} />, action: () => runSlash(() => editor?.chain().focus().setHorizontalRule().run()) },
     { label: 'Code block', aliases: ['code', 'pre', 'snippet'], icon: <Code2 size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleCodeBlock().run()) },
     { label: 'Table', aliases: ['grid', 'columns', 'rows'], icon: <Table2 size={16} />, action: () => runSlash(() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()) },
-    { label: 'Link', aliases: ['url', 'anchor'], icon: <LinkIcon size={16} />, action: insertLink },
-    { label: 'Image', aliases: ['picture', 'photo'], icon: <ImageIcon size={16} />, action: insertImage },
+    { label: 'Link', aliases: ['url', 'anchor'], icon: <LinkIcon size={16} />, action: () => openInputModal('link') },
+    { label: 'Image', aliases: ['picture', 'photo'], icon: <ImageIcon size={16} />, action: () => openInputModal('image') },
     { label: 'Note callout', aliases: ['callout', 'note'], icon: <Sparkles size={16} />, action: () => insertCallout('note') },
     { label: 'Idea callout', aliases: ['idea', 'lightbulb'], icon: <Lightbulb size={16} />, action: () => insertCallout('idea') },
     { label: 'Warning callout', aliases: ['warning', 'alert'], icon: <TriangleAlert size={16} />, action: () => insertCallout('warning') }
@@ -204,6 +215,16 @@ export default function Editor({ content, onChange }: Props) {
     <div className="editor-wrap">
       {slashOpen && <div className={`slash-menu ${slashPosition.placement}`} style={{ top: slashPosition.top, left: slashPosition.left }}>{filteredSlashItems.length ? filteredSlashItems.map((item) => <button key={item.label} onMouseDown={(event) => { event.preventDefault(); item.action(); }}>{item.icon}{item.label}</button>) : <p>No blocks found</p>}</div>}
       <EditorContent editor={editor} />
+      {inputModal && (
+        <div className="modal-backdrop editor-modal-backdrop" onMouseDown={() => setInputModal(null)}>
+          <section className="notebook-modal editor-input-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <p className="eyebrow">Editor block</p>
+            <h2>{inputModal.title}</h2>
+            <label className="modal-field">URL<input value={inputValue} onChange={(event) => setInputValue(event.target.value)} placeholder={inputModal.placeholder} autoFocus onKeyDown={(event) => { if (event.key === 'Enter') submitInputModal(); if (event.key === 'Escape') setInputModal(null); }} /></label>
+            <div className="modal-actions"><button className="ghost-button" onClick={() => setInputModal(null)}>Cancel</button><button className="new" onClick={submitInputModal}>{inputModal.kind === 'link' ? 'Insert Link' : 'Insert Image'}</button></div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

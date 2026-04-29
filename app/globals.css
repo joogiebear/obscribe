@@ -186,3 +186,5 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .confirm-modal p { margin: 0 0 6px; color: var(--muted); line-height: 1.55; }
 .danger-button { border: 0; border-radius: 12px; background: #9f3c2d; color: white; padding: 10px 12px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; box-shadow: 0 8px 22px rgba(159,60,45,.18); }
 .danger-button:hover { background: #873123; }
+.editor-modal-backdrop { position: fixed; }
+.editor-input-modal { text-align: left; }
