@@ -254,8 +254,9 @@ export default function AuthPanel() {
       setAiPassphrase('');
       setSettingsMessage(`${aiProviderLabels[aiProvider]} encrypted and saved on this device.`);
     } catch (error) {
-      console.error('Failed to encrypt AI key', error);
-      setSettingsMessage('Local-only encryption failed in this browser. If you want the key to work globally, switch to Sync to account and try Encrypt & sync.');
+      console.error('Failed to save AI key', error);
+      const message = error instanceof Error ? error.message : 'Could not save AI key.';
+      setSettingsMessage(aiStorageMode === 'account' ? message : 'Local-only encryption failed in this browser. If you want the key to work globally, switch to Sync to account and try Encrypt & sync.');
     } finally {
       setSettingsBusy(false);
     }
