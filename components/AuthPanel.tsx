@@ -255,7 +255,7 @@ export default function AuthPanel() {
       setSettingsMessage(`${aiProviderLabels[aiProvider]} encrypted and saved on this device.`);
     } catch (error) {
       console.error('Failed to encrypt AI key', error);
-      setSettingsMessage('Could not encrypt AI key in this browser. Check that storage is allowed for obscribe.com.');
+      setSettingsMessage('Local-only encryption failed in this browser. If you want the key to work globally, switch to Sync to account and try Encrypt & sync.');
     } finally {
       setSettingsBusy(false);
     }
@@ -406,8 +406,8 @@ export default function AuthPanel() {
                   </label>
                   <p className="settings-note"><strong>Connection method:</strong> {aiProviderMethods[aiProvider]}</p>
                   <div className="vault-mode">
-                    <label><input type="radio" checked={aiStorageMode === 'account'} disabled={!user} onChange={() => setAiStorageMode('account')} /> Sync to account</label>
-                    <label><input type="radio" checked={aiStorageMode === 'local'} onChange={() => { setAiStorageMode('local'); loadLocalAiSettings(); }} /> Local encrypted only</label>
+                    <label className={aiStorageMode === 'account' ? 'active' : ''}><input type="radio" checked={aiStorageMode === 'account'} disabled={!user} onChange={() => setAiStorageMode('account')} /> Sync to account <small>recommended</small></label>
+                    <label className={aiStorageMode === 'local' ? 'active' : ''}><input type="radio" checked={aiStorageMode === 'local'} onChange={() => { setAiStorageMode('local'); loadLocalAiSettings(); }} /> Local encrypted only <small>this device</small></label>
                   </div>
                   <a className="provider-key-link" href={aiProviderKeyLinks[aiProvider]} target="_blank" rel="noreferrer">Get an API key for {aiProviderLabels[aiProvider]}</a>
                   <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => { setAiApiKey(event.target.value); setAiKeyUnlocked(Boolean(event.target.value)); }} placeholder={hasSavedAiKey && !aiKeyUnlocked ? 'Encrypted key saved — unlock to view or replace' : 'Paste provider API key'} autoComplete="off" /></label>
