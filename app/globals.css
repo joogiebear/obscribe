@@ -204,3 +204,10 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .prose-page .task-item-content { flex: 1 1 auto !important; min-width: 0 !important; }
 .prose-page .task-item-content > p:first-child { margin-top: 0 !important; }
 .prose-page .task-item-content > p:last-child { margin-bottom: 0 !important; }
+/* Final task-list layout: keep Tiptap's default editable structure, only align it. */
+.prose-page ul[data-type="taskList"] { list-style: none !important; padding-left: 0 !important; }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] { display: flex !important; flex-direction: row !important; align-items: baseline !important; gap: 10px !important; list-style: none !important; }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label { flex: 0 0 auto !important; display: inline-flex !important; align-items: center !important; align-self: baseline !important; padding-top: 0 !important; margin: 0 !important; transform: translateY(2px); }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label input { margin: 0 !important; width: 16px !important; height: 16px !important; accent-color: var(--accent); }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div { flex: 1 1 auto !important; min-width: 0 !important; display: block !important; }
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p { margin: 0 0 8px !important; }

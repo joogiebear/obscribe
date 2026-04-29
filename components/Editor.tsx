@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type JSONContent, type NodeViewProps } from '@tiptap/react';
+import { EditorContent, useEditor, type JSONContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
@@ -48,24 +48,6 @@ const Callout = Node.create({
 });
 
 
-const CustomTaskItem = TaskItem.extend({
-  addNodeView() {
-    return ReactNodeViewRenderer(TaskItemView);
-  }
-});
-
-function TaskItemView({ node, updateAttributes }: NodeViewProps) {
-  const checked = Boolean(node.attrs.checked);
-  return (
-    <NodeViewWrapper as="li" className="task-item-row" data-type="taskItem" data-checked={checked}>
-      <label className="task-checkbox-wrap" contentEditable={false}>
-        <input type="checkbox" checked={checked} onChange={(event) => updateAttributes({ checked: event.target.checked })} />
-      </label>
-      <NodeViewContent className="task-item-content" />
-    </NodeViewWrapper>
-  );
-}
-
 export default function Editor({ content, onChange }: Props) {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
@@ -85,7 +67,7 @@ export default function Editor({ content, onChange }: Props) {
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
       TaskList,
-      CustomTaskItem.configure({ nested: true }),
+      TaskItem.configure({ nested: true }),
       Callout,
       Placeholder.configure({ placeholder: 'Start writing. Try / for blocks, #tags, or [[page links]] soon…' })
     ],
