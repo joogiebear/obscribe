@@ -3,22 +3,88 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import MiniSearch from 'minisearch';
-import { nanoid } from 'nanoid';
-import { BookOpen, Inbox, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { BookOpen, Cloud, HardDrive, Inbox, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
 import AuthPanel from './AuthPanel';
 import { db } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import type { Notebook, PageRecord, Section } from '@/lib/types';
 import { emptyDoc, tagsFromText, textFromDoc, titleFromText } from '@/lib/doc';
 import type { JSONContent } from '@tiptap/react';
+import type { User } from '@supabase/supabase-js';
 
 const Editor = dynamic(() => import('./Editor'), { ssr: false });
 
 const starterSections = ['Inbox', 'Journal', 'Projects', 'References'];
 const colors = ['#d97706', '#dc6b8a', '#7c8f45', '#5b8fb9', '#8b6fb3'];
 
+type CloudNotebook = {
+  id: string;
+  name: string;
+  accent_color: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type CloudSection = {
+  id: string;
+  notebook_id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type CloudPage = {
+  id: string;
+  notebook_id: string;
+  section_id: string;
+  title: string;
+  title_source: 'auto' | 'manual' | 'untitled';
+  pinned: boolean;
+  sort_order: number;
+  content: JSONContent;
+  plain_text: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+function newId() {
+  return crypto.randomUUID();
+}
+
+function toNotebook(row: CloudNotebook): Notebook {
+  return { id: row.id, name: row.name, accentColor: row.accent_color, order: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function toSection(row: CloudSection): Section {
+  return { id: row.id, notebookId: row.notebook_id, name: row.name, order: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function toPage(row: CloudPage): PageRecord {
+  return { id: row.id, notebookId: row.notebook_id, sectionId: row.section_id, title: row.title, titleSource: row.title_source, pinned: row.pinned, order: row.sort_order, content: row.content, plainText: row.plain_text, tags: row.tags ?? [], createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function welcomePageContent(): JSONContent {
+  return {
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Welcome to Obscribe' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'This is the first clickable Local Alpha slice: notebooks, section tabs, pages, saving, and search.' }] },
+      { type: 'taskList', content: [
+        { type: 'taskItem', attrs: { checked: true }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Create a notebook' }] }] },
+        { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Write a real note' }] }] }
+      ]},
+      { type: 'paragraph', content: [{ type: 'text', text: 'Try adding #ideas or searching for “Local Alpha”.' }] }
+    ]
+  };
+}
+
 export default function ObscribeApp() {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [pages, setPages] = useState<PageRecord[]>([]);
@@ -28,61 +94,116 @@ export default function ObscribeApp() {
   const [query, setQuery] = useState('');
   const [capture, setCapture] = useState('');
 
+  const isCloudMode = Boolean(user && supabase);
+
   useEffect(() => {
-    const load = async () => {
-      let books = await db.notebooks.orderBy('order').toArray();
-      if (!books.length) {
-        const now = new Date().toISOString();
-        const notebook: Notebook = { id: nanoid(), name: 'My First Notebook', accentColor: colors[0], order: 0, createdAt: now, updatedAt: now };
-        const secs: Section[] = starterSections.map((name, order) => ({ id: nanoid(), notebookId: notebook.id, name, order, createdAt: now, updatedAt: now }));
-        const page: PageRecord = {
-          id: nanoid(),
-          notebookId: notebook.id,
-          sectionId: secs[0].id,
-          title: 'Welcome to Obscribe',
-          titleSource: 'manual',
-          pinned: true,
-          order: 0,
-          content: {
-            type: 'doc',
-            content: [
-              { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Welcome to Obscribe' }] },
-              { type: 'paragraph', content: [{ type: 'text', text: 'This is the first clickable Local Alpha slice: notebooks, section tabs, pages, local saving, and search.' }] },
-              { type: 'taskList', content: [
-                { type: 'taskItem', attrs: { checked: true }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Create a notebook' }] }] },
-                { type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Write a real note' }] }] }
-              ]},
-              { type: 'paragraph', content: [{ type: 'text', text: 'Try adding #ideas or searching for “Local Alpha”.' }] }
-            ]
-          },
-          plainText: 'Welcome to Obscribe This is the first clickable Local Alpha slice notebooks section tabs pages local saving and search Try adding ideas or searching for Local Alpha',
-          tags: ['ideas'],
-          createdAt: now,
-          updatedAt: now
-        };
-        await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
-          await db.notebooks.add(notebook);
-          await db.sections.bulkAdd(secs);
-          await db.pages.add(page);
-        });
-        books = [notebook];
-      }
-      const secs = await db.sections.orderBy('order').toArray();
-      const pgs = await db.pages.orderBy('order').toArray();
-      setNotebooks(books);
-      setSections(secs);
-      setPages(pgs);
-      setActiveNotebookId(books[0]?.id);
-      setActiveSectionId(secs.find((s) => s.notebookId === books[0]?.id)?.id);
-      setActivePageId(pgs.find((p) => p.notebookId === books[0]?.id)?.id);
+    async function boot() {
+      setReady(false);
+      const currentUser = supabase ? (await supabase.auth.getUser()).data.user : null;
+      setUser(currentUser ?? null);
+      await loadWorkspace(currentUser ?? null);
       setReady(true);
-    };
-    load().catch((error: unknown) => {
-      console.error('Failed to open Obscribe local notebook', error);
+    }
+
+    boot().catch((error: unknown) => {
+      console.error('Failed to open Obscribe notebook', error);
       setLoadError(error instanceof Error ? error.message : 'Unknown startup error');
       setReady(true);
     });
+
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
+      setReady(false);
+      loadWorkspace(nextUser)
+        .then(() => setReady(true))
+        .catch((error: unknown) => {
+          console.error('Failed to switch Obscribe workspace', error);
+          setLoadError(error instanceof Error ? error.message : 'Unknown workspace error');
+          setReady(true);
+        });
+    });
+    return () => data.subscription.unsubscribe();
   }, []);
+
+  async function loadWorkspace(currentUser: User | null) {
+    if (currentUser && supabase) {
+      await loadCloudWorkspace(currentUser.id);
+    } else {
+      await loadLocalWorkspace();
+    }
+  }
+
+  async function loadLocalWorkspace() {
+    let books = await db.notebooks.orderBy('order').toArray();
+    if (!books.length) {
+      const now = new Date().toISOString();
+      const notebook: Notebook = { id: newId(), name: 'My First Notebook', accentColor: colors[0], order: 0, createdAt: now, updatedAt: now };
+      const secs: Section[] = starterSections.map((name, order) => ({ id: newId(), notebookId: notebook.id, name, order, createdAt: now, updatedAt: now }));
+      const content = welcomePageContent();
+      const plainText = textFromDoc(content);
+      const page: PageRecord = { id: newId(), notebookId: notebook.id, sectionId: secs[0].id, title: 'Welcome to Obscribe', titleSource: 'manual', pinned: true, order: 0, content, plainText, tags: tagsFromText(plainText), createdAt: now, updatedAt: now };
+      await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+        await db.notebooks.add(notebook);
+        await db.sections.bulkAdd(secs);
+        await db.pages.add(page);
+      });
+      books = [notebook];
+    }
+    const secs = await db.sections.orderBy('order').toArray();
+    const pgs = await db.pages.orderBy('order').toArray();
+    setWorkspace(books, secs, pgs);
+  }
+
+  async function loadCloudWorkspace(userId: string) {
+    if (!supabase) return;
+    const { data: notebookRows, error: notebookError } = await supabase.from('notebooks').select('*').order('sort_order');
+    if (notebookError) throw notebookError;
+
+    if (!notebookRows?.length) {
+      await createCloudStarterWorkspace(userId);
+    }
+
+    const [{ data: cloudNotebooks, error: nError }, { data: cloudSections, error: sError }, { data: cloudPages, error: pError }] = await Promise.all([
+      supabase.from('notebooks').select('*').order('sort_order'),
+      supabase.from('sections').select('*').order('sort_order'),
+      supabase.from('pages').select('*').order('sort_order')
+    ]);
+    if (nError) throw nError;
+    if (sError) throw sError;
+    if (pError) throw pError;
+
+    setWorkspace((cloudNotebooks ?? []).map(toNotebook), (cloudSections ?? []).map(toSection), (cloudPages ?? []).map(toPage));
+  }
+
+  async function createCloudStarterWorkspace(userId: string) {
+    if (!supabase) return;
+    const now = new Date().toISOString();
+    const notebookId = newId();
+    const sectionRows = starterSections.map((name, order) => ({ id: newId(), user_id: userId, notebook_id: notebookId, name, sort_order: order, created_at: now, updated_at: now }));
+    const content = welcomePageContent();
+    const plainText = textFromDoc(content);
+
+    const { error: notebookError } = await supabase.from('notebooks').insert({ id: notebookId, user_id: userId, name: 'My First Notebook', accent_color: colors[0], sort_order: 0, created_at: now, updated_at: now });
+    if (notebookError) throw notebookError;
+    const { error: sectionError } = await supabase.from('sections').insert(sectionRows);
+    if (sectionError) throw sectionError;
+    const { error: pageError } = await supabase.from('pages').insert({ id: newId(), user_id: userId, notebook_id: notebookId, section_id: sectionRows[0].id, title: 'Welcome to Obscribe', title_source: 'manual', pinned: true, sort_order: 0, content, plain_text: plainText, tags: tagsFromText(plainText), created_at: now, updated_at: now });
+    if (pageError) throw pageError;
+  }
+
+  function setWorkspace(books: Notebook[], secs: Section[], pgs: PageRecord[]) {
+    setNotebooks(books);
+    setSections(secs);
+    setPages(pgs);
+    const firstBook = books[0];
+    const firstSection = secs.find((s) => s.notebookId === firstBook?.id);
+    const firstPage = pgs.find((p) => p.sectionId === firstSection?.id) ?? pgs.find((p) => p.notebookId === firstBook?.id);
+    setActiveNotebookId(firstBook?.id);
+    setActiveSectionId(firstSection?.id);
+    setActivePageId(firstPage?.id);
+  }
 
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId);
   const notebookSections = sections.filter((s) => s.notebookId === activeNotebookId).sort((a, b) => a.order - b.order);
@@ -96,20 +217,55 @@ export default function ObscribeApp() {
     return mini.search(query, { prefix: true, fuzzy: 0.2 }).slice(0, 8);
   }, [pages, query]);
 
-  const refreshPages = async () => setPages(await db.pages.orderBy('order').toArray());
-  const refreshNotebooks = async () => setNotebooks(await db.notebooks.orderBy('order').toArray());
-  const refreshSections = async () => setSections(await db.sections.orderBy('order').toArray());
+  const refreshPages = async () => {
+    if (isCloudMode && supabase) {
+      const { data, error } = await supabase.from('pages').select('*').order('sort_order');
+      if (error) throw error;
+      setPages((data ?? []).map(toPage));
+    } else {
+      setPages(await db.pages.orderBy('order').toArray());
+    }
+  };
+
+  const refreshNotebooks = async () => {
+    if (isCloudMode && supabase) {
+      const { data, error } = await supabase.from('notebooks').select('*').order('sort_order');
+      if (error) throw error;
+      setNotebooks((data ?? []).map(toNotebook));
+    } else {
+      setNotebooks(await db.notebooks.orderBy('order').toArray());
+    }
+  };
+
+  const refreshSections = async () => {
+    if (isCloudMode && supabase) {
+      const { data, error } = await supabase.from('sections').select('*').order('sort_order');
+      if (error) throw error;
+      setSections((data ?? []).map(toSection));
+    } else {
+      setSections(await db.sections.orderBy('order').toArray());
+    }
+  };
 
   async function createNotebook() {
     const name = prompt('Notebook name?', 'New Notebook')?.trim();
     if (!name) return;
     const now = new Date().toISOString();
-    const notebook: Notebook = { id: nanoid(), name, accentColor: colors[notebooks.length % colors.length], order: notebooks.length, createdAt: now, updatedAt: now };
-    const secs = starterSections.map((section, order) => ({ id: nanoid(), notebookId: notebook.id, name: section, order, createdAt: now, updatedAt: now }));
-    await db.transaction('rw', db.notebooks, db.sections, async () => {
-      await db.notebooks.add(notebook);
-      await db.sections.bulkAdd(secs);
-    });
+    const notebook: Notebook = { id: newId(), name, accentColor: colors[notebooks.length % colors.length], order: notebooks.length, createdAt: now, updatedAt: now };
+    const secs: Section[] = starterSections.map((section, order) => ({ id: newId(), notebookId: notebook.id, name: section, order, createdAt: now, updatedAt: now }));
+
+    if (isCloudMode && supabase && user) {
+      const { error: notebookError } = await supabase.from('notebooks').insert({ id: notebook.id, user_id: user.id, name: notebook.name, accent_color: notebook.accentColor, sort_order: notebook.order, created_at: now, updated_at: now });
+      if (notebookError) throw notebookError;
+      const { error: sectionError } = await supabase.from('sections').insert(secs.map((section) => ({ id: section.id, user_id: user.id, notebook_id: section.notebookId, name: section.name, sort_order: section.order, created_at: now, updated_at: now })));
+      if (sectionError) throw sectionError;
+    } else {
+      await db.transaction('rw', db.notebooks, db.sections, async () => {
+        await db.notebooks.add(notebook);
+        await db.sections.bulkAdd(secs);
+      });
+    }
+
     await refreshNotebooks();
     await refreshSections();
     setActiveNotebookId(notebook.id);
@@ -120,8 +276,15 @@ export default function ObscribeApp() {
   async function createPage(sectionId = activeSectionId) {
     if (!activeNotebookId || !sectionId) return;
     const now = new Date().toISOString();
-    const page: PageRecord = { id: nanoid(), notebookId: activeNotebookId, sectionId, title: 'Untitled', titleSource: 'untitled', pinned: false, order: pages.filter((p) => p.sectionId === sectionId).length, content: emptyDoc, plainText: '', tags: [], createdAt: now, updatedAt: now };
-    await db.pages.add(page);
+    const page: PageRecord = { id: newId(), notebookId: activeNotebookId, sectionId, title: 'Untitled', titleSource: 'untitled', pinned: false, order: pages.filter((p) => p.sectionId === sectionId).length, content: emptyDoc, plainText: '', tags: [], createdAt: now, updatedAt: now };
+
+    if (isCloudMode && supabase && user) {
+      const { error } = await supabase.from('pages').insert({ id: page.id, user_id: user.id, notebook_id: page.notebookId, section_id: page.sectionId, title: page.title, title_source: page.titleSource, pinned: page.pinned, sort_order: page.order, content: page.content, plain_text: page.plainText, tags: page.tags, created_at: now, updated_at: now });
+      if (error) throw error;
+    } else {
+      await db.pages.add(page);
+    }
+
     await refreshPages();
     setActivePageId(page.id);
   }
@@ -130,18 +293,32 @@ export default function ObscribeApp() {
     const plainText = textFromDoc(content);
     const derived = page.titleSource === 'manual' ? { title: page.title, source: page.titleSource } : titleFromText(plainText);
     const updated: PageRecord = { ...page, content, plainText, title: derived.title, titleSource: derived.source, tags: tagsFromText(plainText), updatedAt: new Date().toISOString() };
-    await db.pages.put(updated);
+
     setPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('pages').update({ title: updated.title, title_source: updated.titleSource, content: updated.content, plain_text: updated.plainText, tags: updated.tags, updated_at: updated.updatedAt }).eq('id', updated.id);
+      if (error) throw error;
+    } else {
+      await db.pages.put(updated);
+    }
   }
 
   async function quickCapture() {
     if (!capture.trim() || !activeNotebookId) return;
-    let inbox = sections.find((s) => s.notebookId === activeNotebookId && s.name.toLowerCase() === 'inbox');
+    const inbox = sections.find((s) => s.notebookId === activeNotebookId && s.name.toLowerCase() === 'inbox');
     if (!inbox) return;
     const now = new Date().toISOString();
     const text = capture.trim();
-    const page: PageRecord = { id: nanoid(), notebookId: activeNotebookId, sectionId: inbox.id, title: text.slice(0, 80), titleSource: 'auto', pinned: false, order: pages.filter((p) => p.sectionId === inbox.id).length, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }, plainText: text, tags: tagsFromText(text), createdAt: now, updatedAt: now };
-    await db.pages.add(page);
+    const page: PageRecord = { id: newId(), notebookId: activeNotebookId, sectionId: inbox.id, title: text.slice(0, 80), titleSource: 'auto', pinned: false, order: pages.filter((p) => p.sectionId === inbox.id).length, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }, plainText: text, tags: tagsFromText(text), createdAt: now, updatedAt: now };
+
+    if (isCloudMode && supabase && user) {
+      const { error } = await supabase.from('pages').insert({ id: page.id, user_id: user.id, notebook_id: page.notebookId, section_id: page.sectionId, title: page.title, title_source: page.titleSource, pinned: page.pinned, sort_order: page.order, content: page.content, plain_text: page.plainText, tags: page.tags, created_at: now, updated_at: now });
+      if (error) throw error;
+    } else {
+      await db.pages.add(page);
+    }
+
     setCapture('');
     await refreshPages();
     setActiveSectionId(inbox.id);
@@ -149,8 +326,13 @@ export default function ObscribeApp() {
   }
 
   async function deletePage(page: PageRecord) {
-    if (!confirm(`Delete page “${page.title}”? This local-alpha delete cannot be undone yet.`)) return;
-    await db.pages.delete(page.id);
+    if (!confirm(`Delete page “${page.title}”? This alpha delete cannot be undone yet.`)) return;
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('pages').delete().eq('id', page.id);
+      if (error) throw error;
+    } else {
+      await db.pages.delete(page.id);
+    }
     const remaining = pages.filter((p) => p.id !== page.id);
     setPages(remaining);
     if (activePageId === page.id) setActivePageId(remaining.find((p) => p.sectionId === page.sectionId)?.id);
@@ -158,11 +340,18 @@ export default function ObscribeApp() {
 
   async function deleteSection(section: Section) {
     const pageCount = pages.filter((p) => p.sectionId === section.id).length;
-    if (!confirm(`Delete section “${section.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'}? This local-alpha delete cannot be undone yet.`)) return;
-    await db.transaction('rw', db.sections, db.pages, async () => {
-      await db.sections.delete(section.id);
-      await db.pages.where('sectionId').equals(section.id).delete();
-    });
+    if (!confirm(`Delete section “${section.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'}? This alpha delete cannot be undone yet.`)) return;
+
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('sections').delete().eq('id', section.id);
+      if (error) throw error;
+    } else {
+      await db.transaction('rw', db.sections, db.pages, async () => {
+        await db.sections.delete(section.id);
+        await db.pages.where('sectionId').equals(section.id).delete();
+      });
+    }
+
     await refreshSections();
     await refreshPages();
     const nextSection = sections.find((s) => s.notebookId === section.notebookId && s.id !== section.id);
@@ -172,12 +361,19 @@ export default function ObscribeApp() {
 
   async function deleteNotebook(notebook: Notebook) {
     const pageCount = pages.filter((p) => p.notebookId === notebook.id).length;
-    if (!confirm(`Delete notebook “${notebook.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'}? This local-alpha delete cannot be undone yet.`)) return;
-    await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
-      await db.notebooks.delete(notebook.id);
-      await db.sections.where('notebookId').equals(notebook.id).delete();
-      await db.pages.where('notebookId').equals(notebook.id).delete();
-    });
+    if (!confirm(`Delete notebook “${notebook.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'}? This alpha delete cannot be undone yet.`)) return;
+
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('notebooks').delete().eq('id', notebook.id);
+      if (error) throw error;
+    } else {
+      await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+        await db.notebooks.delete(notebook.id);
+        await db.sections.where('notebookId').equals(notebook.id).delete();
+        await db.pages.where('notebookId').equals(notebook.id).delete();
+      });
+    }
+
     const nextBooks = notebooks.filter((n) => n.id !== notebook.id);
     await refreshNotebooks();
     await refreshSections();
@@ -190,7 +386,7 @@ export default function ObscribeApp() {
   }
 
   if (!ready) return <main className="loading">Opening your notebook…</main>;
-  if (loadError) return <main className="loading error-state"><h1>Couldn’t open the local notebook</h1><p>{loadError}</p><p>Try refreshing once. If this is a private/incognito browser, IndexedDB may be blocked.</p></main>;
+  if (loadError) return <main className="loading error-state"><h1>Couldn’t open the notebook</h1><p>{loadError}</p><p>If you just created Supabase tables, refresh once and confirm RLS policies are enabled.</p></main>;
 
   return (
     <main className="app" style={{ ['--accent' as string]: activeNotebook?.accentColor ?? colors[0] }}>
@@ -210,7 +406,7 @@ export default function ObscribeApp() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Local Alpha</p>
+            <p className="eyebrow">{isCloudMode ? 'Cloud Alpha' : 'Local Alpha'}</p>
             <h1>{activeNotebook?.name}</h1>
           </div>
           <label className="search"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notes…" /></label>
@@ -219,6 +415,8 @@ export default function ObscribeApp() {
         {query && <div className="results">{searchResults.length ? searchResults.map((result) => <button key={result.id} onClick={() => { const page = pages.find((p) => p.id === result.id); setActiveSectionId(page?.sectionId); setActivePageId(String(result.id)); setQuery(''); }}>{String(result.title)}</button>) : <p>No matches yet.</p>}</div>}
 
         <AuthPanel />
+
+        <div className="sync-strip">{isCloudMode ? <><Cloud size={15} /> Signed in: saving this workspace to Supabase.</> : <><HardDrive size={15} /> Signed out: saving locally in this browser.</>}</div>
 
         <div className="capture"><Inbox size={17} /><input value={capture} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
 
