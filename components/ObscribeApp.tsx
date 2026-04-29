@@ -17,6 +17,21 @@ const Editor = dynamic(() => import('./Editor'), { ssr: false });
 const starterSections = ['Inbox', 'Journal', 'Projects', 'References'];
 const colors = ['#d97706', '#dc6b8a', '#7c8f45', '#5b8fb9', '#8b6fb3'];
 
+const alphaLimits = {
+  notebooks: 50,
+  sections: 500,
+  pages: 5000,
+  pageContentBytes: 350_000,
+  quickCaptureChars: 4_000,
+  notebookNameChars: 80,
+  pageTitleChars: 160
+};
+
+function jsonBytes(value: unknown) {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+
 type CloudNotebook = {
   id: string;
   name: string;
@@ -304,7 +319,8 @@ export default function ObscribeApp() {
   }
 
   async function createNotebook() {
-    const name = newNotebookName.trim() || 'New Notebook';
+    if (notebooks.length >= alphaLimits.notebooks) { setOperationError(`Notebook limit reached (${alphaLimits.notebooks}).`); return; }
+    const name = (newNotebookName.trim() || 'New Notebook').slice(0, alphaLimits.notebookNameChars);
     const now = new Date().toISOString();
     const notebook: Notebook = { id: newId(), name, accentColor: newNotebookColor, order: notebooks.length, createdAt: now, updatedAt: now };
     const sectionNames = includeStarterSections ? starterSections : ['Notes'];
@@ -335,6 +351,7 @@ export default function ObscribeApp() {
 
   async function createPage(sectionId = activeSectionId) {
     if (!activeNotebookId || !sectionId) return;
+    if (pages.length >= alphaLimits.pages) { setOperationError(`Page limit reached (${alphaLimits.pages}).`); return; }
     const now = new Date().toISOString();
     const page: PageRecord = { id: newId(), notebookId: activeNotebookId, sectionId, title: 'Untitled', titleSource: 'untitled', pinned: false, order: pages.filter((p) => p.sectionId === sectionId).length, content: emptyDoc, plainText: '', tags: [], createdAt: now, updatedAt: now };
 
@@ -350,6 +367,11 @@ export default function ObscribeApp() {
   }
 
   async function savePageContent(page: PageRecord, content: JSONContent) {
+    if (jsonBytes(content) > alphaLimits.pageContentBytes) {
+      setSaveState('error');
+      setOperationError(`Page is too large to save. Limit is about ${Math.round(alphaLimits.pageContentBytes / 1000)}KB of editor content.`);
+      return;
+    }
     const plainText = textFromDoc(content);
     const derived = page.titleSource === 'manual' ? { title: page.title, source: page.titleSource } : titleFromText(plainText);
     const updated: PageRecord = { ...page, content, plainText, title: derived.title, titleSource: derived.source, tags: tagsFromText(plainText), updatedAt: new Date().toISOString() };
@@ -380,10 +402,13 @@ export default function ObscribeApp() {
     try {
       setOperationError(null);
       if (!capture.trim() || !activeNotebookId) return;
+      if (capture.length > alphaLimits.quickCaptureChars) throw new Error(`Quick capture is too long. Limit is ${alphaLimits.quickCaptureChars} characters.`);
+      if (pages.length >= alphaLimits.pages) throw new Error(`Page limit reached (${alphaLimits.pages}).`);
       let inbox = sections.find((s) => s.notebookId === activeNotebookId && s.name.toLowerCase() === 'inbox');
       const now = new Date().toISOString();
 
       if (!inbox) {
+        if (sections.length >= alphaLimits.sections) throw new Error(`Section limit reached (${alphaLimits.sections}).`);
         inbox = { id: newId(), notebookId: activeNotebookId, name: 'Inbox', order: 0, createdAt: now, updatedAt: now };
         if (isCloudMode && supabase && user) {
           const { error } = await supabase.from('sections').insert({ id: inbox.id, user_id: user.id, notebook_id: inbox.notebookId, name: inbox.name, sort_order: inbox.order, created_at: now, updated_at: now });
@@ -497,7 +522,7 @@ export default function ObscribeApp() {
   }
 
   async function updatePageTitle(page: PageRecord, titleValue: string) {
-    const title = titleValue.trim() || 'Untitled';
+    const title = (titleValue.trim() || 'Untitled').slice(0, alphaLimits.pageTitleChars);
     if (title === page.title && page.titleSource === 'manual') return;
     const updatedAt = new Date().toISOString();
     setSaveState('saving');
@@ -743,7 +768,7 @@ export default function ObscribeApp() {
 
         <div className="sync-strip"><CheckCircle2 size={15} /> Page status <span className={`save-pill ${saveState}`}>{saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Ready'}</span></div>
 
-        <div className="capture"><Inbox size={17} /><input value={capture} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
+        <div className="capture"><Inbox size={17} /><input value={capture} maxLength={alphaLimits.quickCaptureChars} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
         {operationError && <div className="operation-error">{operationError}</div>}
 
         {!notebooks.length && !showTrash ? (
@@ -776,7 +801,7 @@ export default function ObscribeApp() {
 
           <article className="paper">
             {activePage ? <>
-              <div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div>
+              <div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div>
               <Editor key={activePage.id} content={activePage.content} onChange={(doc) => savePageContent(activePage, doc)} />
             </> : <div className="empty"><h2>No page selected</h2><p>Create a page to start writing in this section.</p><button onClick={() => createPage()}>Create page</button></div>}
           </article>
