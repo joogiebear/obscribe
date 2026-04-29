@@ -34,6 +34,13 @@ const aiProviderLabels: Record<AiProvider, string> = {
   xai: 'xAI / Grok API'
 };
 
+const aiProviderKeyLinks: Record<AiProvider, string> = {
+  openai: 'https://platform.openai.com/api-keys',
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  google: 'https://aistudio.google.com/app/apikey',
+  xai: 'https://console.x.ai/'
+};
+
 type AiKeyVault = { version: 1; provider: AiProvider; salt: string; iv: string; ciphertext: string };
 const aiVaultKey = 'obscribe-ai-key-vault';
 const legacyAiProviderKey = 'obscribe-ai-provider';
@@ -309,6 +316,7 @@ export default function AuthPanel() {
                       {Object.entries(aiProviderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </select>
                   </label>
+                  <a className="provider-key-link" href={aiProviderKeyLinks[aiProvider]} target="_blank" rel="noreferrer">Get an API key for {aiProviderLabels[aiProvider]}</a>
                   <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => { setAiApiKey(event.target.value); setAiKeyUnlocked(Boolean(event.target.value)); }} placeholder={hasSavedAiKey && !aiKeyUnlocked ? 'Encrypted key saved — unlock to view or replace' : 'Paste provider API key'} autoComplete="off" /></label>
                   <label className="modal-field">Encryption passphrase<input type="password" value={aiPassphrase} onChange={(event) => setAiPassphrase(event.target.value)} placeholder="Not saved by Obscribe" autoComplete="off" /></label>
                   <p className="settings-note">Alpha note: the API key is encrypted with your passphrase before being stored locally in this browser. Obscribe does not save the passphrase, so you’ll need it to unlock the key on this device.</p>

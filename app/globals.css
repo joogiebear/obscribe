@@ -274,3 +274,5 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .settings-actions button { flex: 1 1 160px; }
 .ai-card { grid-column: span 2; }
 @media (max-width: 760px) { .ai-card { grid-column: auto; } }
+.provider-key-link { border: 1px solid var(--line); border-radius: 13px; background: rgba(255,250,240,.72); color: var(--accent); padding: 10px 12px; text-decoration: none; font-weight: 750; display: inline-flex; align-items: center; justify-content: center; }
+.provider-key-link:hover { background: #f1e5d4; }
