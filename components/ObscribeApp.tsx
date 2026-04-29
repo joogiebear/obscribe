@@ -423,7 +423,12 @@ export default function ObscribeApp() {
     if (!confirmModal) return;
     const action = confirmModal.onConfirm;
     setConfirmModal(null);
-    await action();
+    try {
+      await action();
+      setOperationError(null);
+    } catch (error: unknown) {
+      setOperationError(errorMessage(error));
+    }
   }
 
   async function refreshTrash() {
@@ -673,17 +678,30 @@ export default function ObscribeApp() {
         const pageIds = trashedPages.map((item) => item.id);
 
         if (isCloudMode && supabase) {
+          if (notebookIds.length) await supabase.from('pages').delete().in('notebook_id', notebookIds).throwOnError();
+          if (sectionIds.length) await supabase.from('pages').delete().in('section_id', sectionIds).throwOnError();
           if (pageIds.length) await supabase.from('pages').delete().in('id', pageIds).throwOnError();
+          if (notebookIds.length) await supabase.from('sections').delete().in('notebook_id', notebookIds).throwOnError();
           if (sectionIds.length) await supabase.from('sections').delete().in('id', sectionIds).throwOnError();
           if (notebookIds.length) await supabase.from('notebooks').delete().in('id', notebookIds).throwOnError();
         } else {
           await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+            if (notebookIds.length) {
+              const childPages = await db.pages.where('notebookId').anyOf(notebookIds).primaryKeys();
+              const childSections = await db.sections.where('notebookId').anyOf(notebookIds).primaryKeys();
+              await db.pages.bulkDelete(childPages as string[]);
+              await db.sections.bulkDelete(childSections as string[]);
+            }
+            if (sectionIds.length) {
+              const sectionPages = await db.pages.where('sectionId').anyOf(sectionIds).primaryKeys();
+              await db.pages.bulkDelete(sectionPages as string[]);
+              await db.sections.bulkDelete(sectionIds);
+            }
             if (pageIds.length) await db.pages.bulkDelete(pageIds);
-            if (sectionIds.length) await db.sections.bulkDelete(sectionIds);
             if (notebookIds.length) await db.notebooks.bulkDelete(notebookIds);
           });
         }
-        await refreshTrash();
+        await loadWorkspace(user);
       }
     });
   }
