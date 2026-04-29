@@ -115,6 +115,7 @@ export default function ObscribeApp() {
   const [newNotebookName, setNewNotebookName] = useState('');
   const [newNotebookColor, setNewNotebookColor] = useState(colors[0]);
   const [includeStarterSections, setIncludeStarterSections] = useState(true);
+  const [confirmModal, setConfirmModal] = useState<{ title: string; body: string; confirmLabel: string; destructive?: boolean; onConfirm: () => Promise<void> } | null>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const isCloudMode = Boolean(user && supabase);
@@ -414,6 +415,17 @@ export default function ObscribeApp() {
     }
   }
 
+  function askConfirm(options: { title: string; body: string; confirmLabel: string; destructive?: boolean; onConfirm: () => Promise<void> }) {
+    setConfirmModal(options);
+  }
+
+  async function runConfirmAction() {
+    if (!confirmModal) return;
+    const action = confirmModal.onConfirm;
+    setConfirmModal(null);
+    await action();
+  }
+
   async function refreshTrash() {
     if (isCloudMode && supabase) {
       const [{ data: trashBooks }, { data: trashSections }, { data: trashPages }] = await Promise.all([
@@ -500,74 +512,97 @@ export default function ObscribeApp() {
   }
 
   async function deletePage(page: PageRecord) {
-    if (!confirm(`Move page “${page.title}” to Trash?`)) return;
-    const trashedAt = new Date().toISOString();
-    if (isCloudMode && supabase) {
-      const { error } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', page.id);
-      if (error) throw error;
-    } else {
-      await db.pages.update(page.id, { trashedAt, updatedAt: trashedAt });
-    }
-    const remaining = pages.filter((p) => p.id !== page.id);
-    setPages(remaining);
-    setTrashedPages((prev) => [{ ...page, trashedAt, updatedAt: trashedAt }, ...prev]);
-    if (activePageId === page.id) setActivePageId(remaining.find((p) => p.sectionId === page.sectionId)?.id);
+    askConfirm({
+      title: 'Move page to Trash?',
+      body: `“${page.title}” will leave this section but can be restored from Trash.`,
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+      onConfirm: async () => {
+        const trashedAt = new Date().toISOString();
+        if (isCloudMode && supabase) {
+          const { error } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', page.id);
+          if (error) throw error;
+        } else {
+          await db.pages.update(page.id, { trashedAt, updatedAt: trashedAt });
+        }
+        const remaining = pages.filter((p) => p.id !== page.id);
+        setPages(remaining);
+        setTrashedPages((prev) => [{ ...page, trashedAt, updatedAt: trashedAt }, ...prev]);
+        if (activePageId === page.id) setActivePageId(remaining.find((p) => p.sectionId === page.sectionId)?.id);
+      }
+    });
   }
 
   async function deleteSection(section: Section) {
     const pageCount = pages.filter((p) => p.sectionId === section.id).length;
-    if (!confirm(`Move section “${section.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'} to Trash?`)) return;
-    const trashedAt = new Date().toISOString();
+    askConfirm({
+      title: 'Move section to Trash?',
+      body: `“${section.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'} will be moved to Trash and can be restored later.`,
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+      onConfirm: async () => {
+        const trashedAt = new Date().toISOString();
 
-    if (isCloudMode && supabase) {
-      const { error: sectionError } = await supabase.from('sections').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', section.id);
-      if (sectionError) throw sectionError;
-      const { error: pageError } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('section_id', section.id);
-      if (pageError) throw pageError;
-    } else {
-      const childPages = await db.pages.where('sectionId').equals(section.id).toArray();
-      await db.transaction('rw', db.sections, db.pages, async () => {
-        await db.sections.update(section.id, { trashedAt, updatedAt: trashedAt });
-        await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt, updatedAt: trashedAt })));
-      });
-    }
+        if (isCloudMode && supabase) {
+          const { error: sectionError } = await supabase.from('sections').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', section.id);
+          if (sectionError) throw sectionError;
+          const { error: pageError } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('section_id', section.id);
+          if (pageError) throw pageError;
+        } else {
+          const childPages = await db.pages.where('sectionId').equals(section.id).toArray();
+          await db.transaction('rw', db.sections, db.pages, async () => {
+            await db.sections.update(section.id, { trashedAt, updatedAt: trashedAt });
+            await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt, updatedAt: trashedAt })));
+          });
+        }
 
-    await refreshWorkspaceAndTrash();
-    const nextSection = sections.find((s) => s.notebookId === section.notebookId && s.id !== section.id);
-    setActiveSectionId(nextSection?.id);
-    setActivePageId(nextSection ? pages.find((p) => p.sectionId === nextSection.id)?.id : undefined);
+        await refreshWorkspaceAndTrash();
+        const nextSection = sections.find((s) => s.notebookId === section.notebookId && s.id !== section.id);
+        setActiveSectionId(nextSection?.id);
+        setActivePageId(nextSection ? pages.find((p) => p.sectionId === nextSection.id)?.id : undefined);
+      }
+    });
   }
+
 
   async function deleteNotebook(notebook: Notebook) {
     const pageCount = pages.filter((p) => p.notebookId === notebook.id).length;
-    if (!confirm(`Move notebook “${notebook.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'} to Trash?`)) return;
-    const trashedAt = new Date().toISOString();
+    askConfirm({
+      title: 'Move notebook to Trash?',
+      body: `“${notebook.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'} will be moved to Trash and can be restored later.`,
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+      onConfirm: async () => {
+        const trashedAt = new Date().toISOString();
 
-    if (isCloudMode && supabase) {
-      const { error: notebookError } = await supabase.from('notebooks').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', notebook.id);
-      if (notebookError) throw notebookError;
-      const { error: sectionError } = await supabase.from('sections').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('notebook_id', notebook.id);
-      if (sectionError) throw sectionError;
-      const { error: pageError } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('notebook_id', notebook.id);
-      if (pageError) throw pageError;
-    } else {
-      const childSections = await db.sections.where('notebookId').equals(notebook.id).toArray();
-      const childPages = await db.pages.where('notebookId').equals(notebook.id).toArray();
-      await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
-        await db.notebooks.update(notebook.id, { trashedAt, updatedAt: trashedAt });
-        await db.sections.bulkPut(childSections.map((section) => ({ ...section, trashedAt, updatedAt: trashedAt })));
-        await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt, updatedAt: trashedAt })));
-      });
-    }
+        if (isCloudMode && supabase) {
+          const { error: notebookError } = await supabase.from('notebooks').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', notebook.id);
+          if (notebookError) throw notebookError;
+          const { error: sectionError } = await supabase.from('sections').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('notebook_id', notebook.id);
+          if (sectionError) throw sectionError;
+          const { error: pageError } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('notebook_id', notebook.id);
+          if (pageError) throw pageError;
+        } else {
+          const childSections = await db.sections.where('notebookId').equals(notebook.id).toArray();
+          const childPages = await db.pages.where('notebookId').equals(notebook.id).toArray();
+          await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+            await db.notebooks.update(notebook.id, { trashedAt, updatedAt: trashedAt });
+            await db.sections.bulkPut(childSections.map((section) => ({ ...section, trashedAt, updatedAt: trashedAt })));
+            await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt, updatedAt: trashedAt })));
+          });
+        }
 
-    const nextBooks = notebooks.filter((n) => n.id !== notebook.id);
-    await refreshWorkspaceAndTrash();
-    const nextNotebook = nextBooks[0];
-    setActiveNotebookId(nextNotebook?.id);
-    const nextSection = nextNotebook ? sections.find((s) => s.notebookId === nextNotebook.id) : undefined;
-    setActiveSectionId(nextSection?.id);
-    setActivePageId(nextSection ? pages.find((p) => p.sectionId === nextSection.id)?.id : undefined);
+        const nextBooks = notebooks.filter((n) => n.id !== notebook.id);
+        await refreshWorkspaceAndTrash();
+        const nextNotebook = nextBooks[0];
+        setActiveNotebookId(nextNotebook?.id);
+        const nextSection = nextNotebook ? sections.find((s) => s.notebookId === nextNotebook.id) : undefined;
+        setActiveSectionId(nextSection?.id);
+        setActivePageId(nextSection ? pages.find((p) => p.sectionId === nextSection.id)?.id : undefined);
+      }
+    });
   }
+
 
   async function restoreItem(kind: 'notebook' | 'section' | 'page', id: string) {
     const updatedAt = new Date().toISOString();
@@ -605,38 +640,52 @@ export default function ObscribeApp() {
   }
 
   async function permanentlyDeleteItem(kind: 'notebook' | 'section' | 'page', id: string, label: string) {
-    if (!confirm(`Permanently delete “${label}”? This cannot be undone.`)) return;
-    if (isCloudMode && supabase) {
-      const table = kind === 'notebook' ? 'notebooks' : kind === 'section' ? 'sections' : 'pages';
-      const { error } = await supabase.from(table).delete().eq('id', id);
-      if (error) throw error;
-    } else {
-      if (kind === 'notebook') await db.notebooks.delete(id);
-      if (kind === 'section') await db.sections.delete(id);
-      if (kind === 'page') await db.pages.delete(id);
-    }
-    await refreshTrash();
+    askConfirm({
+      title: 'Permanently delete?',
+      body: `“${label}” will be permanently deleted. This cannot be undone.`,
+      confirmLabel: 'Delete Forever',
+      destructive: true,
+      onConfirm: async () => {
+        if (isCloudMode && supabase) {
+          const table = kind === 'notebook' ? 'notebooks' : kind === 'section' ? 'sections' : 'pages';
+          const { error } = await supabase.from(table).delete().eq('id', id);
+          if (error) throw error;
+        } else {
+          if (kind === 'notebook') await db.notebooks.delete(id);
+          if (kind === 'section') await db.sections.delete(id);
+          if (kind === 'page') await db.pages.delete(id);
+        }
+        await refreshTrash();
+      }
+    });
   }
 
   async function clearTrash() {
     if (!trashCount) return;
-    if (!confirm(`Permanently delete ${trashCount} trashed item${trashCount === 1 ? '' : 's'}? This cannot be undone.`)) return;
-    const notebookIds = trashedNotebooks.map((item) => item.id);
-    const sectionIds = trashedSections.map((item) => item.id);
-    const pageIds = trashedPages.map((item) => item.id);
+    askConfirm({
+      title: 'Clear Trash?',
+      body: `${trashCount} trashed item${trashCount === 1 ? '' : 's'} will be permanently deleted. This cannot be undone.`,
+      confirmLabel: 'Clear Trash',
+      destructive: true,
+      onConfirm: async () => {
+        const notebookIds = trashedNotebooks.map((item) => item.id);
+        const sectionIds = trashedSections.map((item) => item.id);
+        const pageIds = trashedPages.map((item) => item.id);
 
-    if (isCloudMode && supabase) {
-      if (pageIds.length) await supabase.from('pages').delete().in('id', pageIds).throwOnError();
-      if (sectionIds.length) await supabase.from('sections').delete().in('id', sectionIds).throwOnError();
-      if (notebookIds.length) await supabase.from('notebooks').delete().in('id', notebookIds).throwOnError();
-    } else {
-      await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
-        if (pageIds.length) await db.pages.bulkDelete(pageIds);
-        if (sectionIds.length) await db.sections.bulkDelete(sectionIds);
-        if (notebookIds.length) await db.notebooks.bulkDelete(notebookIds);
-      });
-    }
-    await refreshTrash();
+        if (isCloudMode && supabase) {
+          if (pageIds.length) await supabase.from('pages').delete().in('id', pageIds).throwOnError();
+          if (sectionIds.length) await supabase.from('sections').delete().in('id', sectionIds).throwOnError();
+          if (notebookIds.length) await supabase.from('notebooks').delete().in('id', notebookIds).throwOnError();
+        } else {
+          await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+            if (pageIds.length) await db.pages.bulkDelete(pageIds);
+            if (sectionIds.length) await db.sections.bulkDelete(sectionIds);
+            if (notebookIds.length) await db.notebooks.bulkDelete(notebookIds);
+          });
+        }
+        await refreshTrash();
+      }
+    });
   }
 
   const trashCount = trashedNotebooks.length + trashedSections.length + trashedPages.length;
@@ -717,6 +766,16 @@ export default function ObscribeApp() {
         )}
         </>}
       </section>
+      {confirmModal && (
+        <div className="modal-backdrop" onMouseDown={() => setConfirmModal(null)}>
+          <section className="confirm-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="confirm-icon"><Trash2 size={22} /></div>
+            <h2>{confirmModal.title}</h2>
+            <p>{confirmModal.body}</p>
+            <div className="modal-actions"><button className="ghost-button" onClick={() => setConfirmModal(null)}>Cancel</button><button className={confirmModal.destructive ? 'danger-button' : 'new'} onClick={runConfirmAction}>{confirmModal.confirmLabel}</button></div>
+          </section>
+        </div>
+      )}
       {showNotebookModal && (
         <div className="modal-backdrop" onMouseDown={() => setShowNotebookModal(false)}>
           <section className="notebook-modal" onMouseDown={(event) => event.stopPropagation()}>

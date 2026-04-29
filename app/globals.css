@@ -180,3 +180,9 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .prose-page th { background: #eadfce; font-weight: 750; }
 .prose-page .selectedCell::after { background: color-mix(in srgb, var(--accent), transparent 82%); content: ""; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; position: absolute; z-index: 2; }
 .prose-page img { max-width: 100%; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 10px 32px rgba(48,38,24,.12); }
+.confirm-modal { width: min(420px, 100%); border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: 0 30px 90px rgba(0,0,0,.28); padding: 24px; display: grid; justify-items: center; gap: 12px; text-align: center; }
+.confirm-icon { width: 52px; height: 52px; border-radius: 18px; background: #fff0ec; color: #9f3c2d; display: grid; place-items: center; }
+.confirm-modal h2 { margin: 0; font-size: 26px; letter-spacing: -.035em; }
+.confirm-modal p { margin: 0 0 6px; color: var(--muted); line-height: 1.55; }
+.danger-button { border: 0; border-radius: 12px; background: #9f3c2d; color: white; padding: 10px 12px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; box-shadow: 0 8px 22px rgba(159,60,45,.18); }
+.danger-button:hover { background: #873123; }
