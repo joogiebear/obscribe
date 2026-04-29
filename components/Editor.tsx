@@ -7,8 +7,18 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Typography from '@tiptap/extension-typography';
+import Link from '@tiptap/extension-link';
+import Image from '@tiptap/extension-image';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { createLowlight } from 'lowlight';
 import { Node } from '@tiptap/core';
-import { Lightbulb, ListTodo, Minus, Quote, Sparkles, TextQuote, TriangleAlert } from 'lucide-react';
+import { Code2, Image as ImageIcon, Link as LinkIcon, Lightbulb, ListTodo, Minus, Quote, Sparkles, Table2, TextQuote, TriangleAlert } from 'lucide-react';
+
+const lowlight = createLowlight();
 
 type Props = {
   content: JSONContent;
@@ -54,8 +64,15 @@ export default function Editor({ content, onChange }: Props) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false, link: false }),
       Typography,
+      Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
+      Image.configure({ allowBase64: true, inline: false }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      CodeBlockLowlight.configure({ lowlight }),
       TaskList,
       TaskItem.configure({ nested: true }),
       Callout,
@@ -130,11 +147,34 @@ export default function Editor({ content, onChange }: Props) {
     setSlashOpen(false);
   }
 
+  function insertLink() {
+    const previousUrl = editor?.getAttributes('link').href;
+    const url = window.prompt('Paste a link URL', previousUrl || 'https://');
+    if (!url) return;
+    runSlash(() => {
+      if (editor?.state.selection.empty) {
+        editor?.chain().focus().insertContent({ type: 'text', text: url, marks: [{ type: 'link', attrs: { href: url } }] }).run();
+      } else {
+        editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+      }
+    });
+  }
+
+  function insertImage() {
+    const url = window.prompt('Paste an image URL');
+    if (!url) return;
+    runSlash(() => editor?.chain().focus().setImage({ src: url }).run());
+  }
+
   const slashItems = [
     { label: 'Heading', aliases: ['h2', 'title'], icon: <TextQuote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleHeading({ level: 2 }).run()) },
     { label: 'Todo', aliases: ['task', 'checkbox', 'check'], icon: <ListTodo size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleTaskList().run()) },
     { label: 'Quote', aliases: ['blockquote'], icon: <Quote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleBlockquote().run()) },
     { label: 'Divider', aliases: ['line', 'rule', 'hr'], icon: <Minus size={16} />, action: () => runSlash(() => editor?.chain().focus().setHorizontalRule().run()) },
+    { label: 'Code block', aliases: ['code', 'pre', 'snippet'], icon: <Code2 size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleCodeBlock().run()) },
+    { label: 'Table', aliases: ['grid', 'columns', 'rows'], icon: <Table2 size={16} />, action: () => runSlash(() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()) },
+    { label: 'Link', aliases: ['url', 'anchor'], icon: <LinkIcon size={16} />, action: insertLink },
+    { label: 'Image', aliases: ['picture', 'photo'], icon: <ImageIcon size={16} />, action: insertImage },
     { label: 'Note callout', aliases: ['callout', 'note'], icon: <Sparkles size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'note' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] }).run()) },
     { label: 'Idea callout', aliases: ['idea', 'lightbulb'], icon: <Lightbulb size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'idea' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Idea' }] }] }).run()) },
     { label: 'Warning callout', aliases: ['warning', 'alert'], icon: <TriangleAlert size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'warning' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Warning' }] }] }).run()) }
