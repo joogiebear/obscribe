@@ -211,3 +211,8 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label input { margin: 0 !important; width: 16px !important; height: 16px !important; accent-color: var(--accent); }
 .prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div { flex: 1 1 auto !important; min-width: 0 !important; display: block !important; }
 .prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p { margin: 0 0 8px !important; }
+.simple-todo-row { display: flex; align-items: baseline; gap: 10px; margin: 8px 0; }
+.simple-todo-checkbox { flex: 0 0 auto; display: inline-flex; align-items: center; transform: translateY(2px); }
+.simple-todo-checkbox input { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.simple-todo-content { flex: 1 1 auto; min-width: 0; outline: none; }
+.simple-todo-row[data-checked="true"] .simple-todo-content { color: var(--muted); text-decoration: line-through; }
