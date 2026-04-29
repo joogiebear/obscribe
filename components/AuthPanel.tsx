@@ -34,6 +34,49 @@ const aiProviderLabels: Record<AiProvider, string> = {
   xai: 'xAI / Grok API'
 };
 
+type AiKeyVault = { version: 1; provider: AiProvider; salt: string; iv: string; ciphertext: string };
+const aiVaultKey = 'obscribe-ai-key-vault';
+const legacyAiProviderKey = 'obscribe-ai-provider';
+const legacyAiApiKey = 'obscribe-ai-api-key';
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string) {
+  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+}
+
+async function deriveVaultKey(passphrase: string, salt: BufferSource) {
+  const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 250_000, hash: 'SHA-256' },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptAiKey(provider: AiProvider, apiKey: string, passphrase: string): Promise<AiKeyVault> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveVaultKey(passphrase, salt.buffer as ArrayBuffer);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, new TextEncoder().encode(apiKey)));
+  return { version: 1, provider, salt: bytesToBase64(salt), iv: bytesToBase64(iv), ciphertext: bytesToBase64(ciphertext) };
+}
+
+async function decryptAiKey(vault: AiKeyVault, passphrase: string) {
+  const salt = base64ToBytes(vault.salt);
+  const iv = base64ToBytes(vault.iv);
+  const key = await deriveVaultKey(passphrase, salt.buffer as ArrayBuffer);
+  const ciphertext = base64ToBytes(vault.ciphertext);
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, ciphertext.buffer as ArrayBuffer);
+  return new TextDecoder().decode(plaintext);
+}
+
 export default function AuthPanel() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -46,7 +89,9 @@ export default function AuthPanel() {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [aiProvider, setAiProvider] = useState<AiProvider>('openai');
   const [aiApiKey, setAiApiKey] = useState('');
+  const [aiPassphrase, setAiPassphrase] = useState('');
   const [hasSavedAiKey, setHasSavedAiKey] = useState(false);
+  const [aiKeyUnlocked, setAiKeyUnlocked] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -65,11 +110,26 @@ export default function AuthPanel() {
 
   useEffect(() => {
     if (!settingsOpen) return;
-    const savedProvider = localStorage.getItem('obscribe-ai-provider') as AiProvider | null;
-    const savedKey = localStorage.getItem('obscribe-ai-api-key') ?? '';
-    if (savedProvider && savedProvider in aiProviderLabels) setAiProvider(savedProvider);
-    setAiApiKey(savedKey);
-    setHasSavedAiKey(Boolean(savedKey));
+    const vaultRaw = localStorage.getItem(aiVaultKey);
+    const legacyProvider = localStorage.getItem(legacyAiProviderKey) as AiProvider | null;
+    const legacyKey = localStorage.getItem(legacyAiApiKey) ?? '';
+    if (vaultRaw) {
+      try {
+        const vault = JSON.parse(vaultRaw) as AiKeyVault;
+        if (vault.provider in aiProviderLabels) setAiProvider(vault.provider);
+        setHasSavedAiKey(true);
+        setAiApiKey('');
+        setAiKeyUnlocked(false);
+        return;
+      } catch {
+        localStorage.removeItem(aiVaultKey);
+      }
+    }
+    if (legacyProvider && legacyProvider in aiProviderLabels) setAiProvider(legacyProvider);
+    setAiApiKey(legacyKey);
+    setHasSavedAiKey(Boolean(legacyKey));
+    setAiKeyUnlocked(Boolean(legacyKey));
+    if (legacyKey) setSettingsMessage('Existing AI key found. Save it with a passphrase to encrypt it.');
   }, [settingsOpen]);
 
   async function saveProfile() {
@@ -100,19 +160,61 @@ export default function AuthPanel() {
     setSettingsMessage('Password updated.');
   }
 
-  function saveAiSettings() {
-    localStorage.setItem('obscribe-ai-provider', aiProvider);
-    localStorage.setItem('obscribe-ai-api-key', aiApiKey.trim());
-    setHasSavedAiKey(Boolean(aiApiKey.trim()));
-    setSettingsMessage(`${aiProviderLabels[aiProvider]} saved on this device.`);
+  async function saveAiSettings() {
+    if (!aiApiKey.trim()) return;
+    if (aiPassphrase.length < 8) {
+      setSettingsMessage('Use an encryption passphrase with at least 8 characters.');
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      const vault = await encryptAiKey(aiProvider, aiApiKey.trim(), aiPassphrase);
+      localStorage.setItem(aiVaultKey, JSON.stringify(vault));
+      localStorage.removeItem(legacyAiProviderKey);
+      localStorage.removeItem(legacyAiApiKey);
+      setHasSavedAiKey(true);
+      setAiKeyUnlocked(true);
+      setSettingsMessage(`${aiProviderLabels[aiProvider]} encrypted and saved on this device.`);
+    } catch {
+      setSettingsMessage('Could not encrypt AI key in this browser.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
+  async function unlockAiSettings() {
+    const vaultRaw = localStorage.getItem(aiVaultKey);
+    if (!vaultRaw) return;
+    if (!aiPassphrase) {
+      setSettingsMessage('Enter your AI vault passphrase to unlock the saved key.');
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      const vault = JSON.parse(vaultRaw) as AiKeyVault;
+      const decrypted = await decryptAiKey(vault, aiPassphrase);
+      setAiProvider(vault.provider);
+      setAiApiKey(decrypted);
+      setAiKeyUnlocked(true);
+      setSettingsMessage('AI key unlocked for this session.');
+    } catch {
+      setSettingsMessage('Could not unlock AI key. Check your passphrase.');
+    } finally {
+      setSettingsBusy(false);
+    }
   }
 
   function clearAiSettings() {
-    localStorage.removeItem('obscribe-ai-provider');
-    localStorage.removeItem('obscribe-ai-api-key');
+    localStorage.removeItem(aiVaultKey);
+    localStorage.removeItem(legacyAiProviderKey);
+    localStorage.removeItem(legacyAiApiKey);
     setAiProvider('openai');
     setAiApiKey('');
+    setAiPassphrase('');
     setHasSavedAiKey(false);
+    setAiKeyUnlocked(false);
     setSettingsMessage('AI provider key removed from this device.');
   }
 
@@ -207,9 +309,10 @@ export default function AuthPanel() {
                       {Object.entries(aiProviderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </select>
                   </label>
-                  <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => setAiApiKey(event.target.value)} placeholder={hasSavedAiKey ? 'Saved on this device' : 'Paste provider API key'} autoComplete="off" /></label>
-                  <p className="settings-note">Alpha note: this key is stored only in this browser’s local storage. We’ll move to encrypted server-side storage before team/shared AI features.</p>
-                  <div className="settings-actions"><button className="new" onClick={saveAiSettings} disabled={!aiApiKey.trim()}><Save size={16} /> Save AI key</button><button className="ghost-button" onClick={clearAiSettings} disabled={!hasSavedAiKey && !aiApiKey}><Trash2 size={16} /> Remove</button></div>
+                  <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => { setAiApiKey(event.target.value); setAiKeyUnlocked(Boolean(event.target.value)); }} placeholder={hasSavedAiKey && !aiKeyUnlocked ? 'Encrypted key saved — unlock to view or replace' : 'Paste provider API key'} autoComplete="off" /></label>
+                  <label className="modal-field">Encryption passphrase<input type="password" value={aiPassphrase} onChange={(event) => setAiPassphrase(event.target.value)} placeholder="Not saved by Obscribe" autoComplete="off" /></label>
+                  <p className="settings-note">Alpha note: the API key is encrypted with your passphrase before being stored locally in this browser. Obscribe does not save the passphrase, so you’ll need it to unlock the key on this device.</p>
+                  <div className="settings-actions"><button className="new" onClick={saveAiSettings} disabled={settingsBusy || !aiApiKey.trim()}><Save size={16} /> Encrypt & save</button><button className="ghost-button" onClick={unlockAiSettings} disabled={settingsBusy || !hasSavedAiKey || !aiPassphrase}>Unlock</button><button className="ghost-button" onClick={clearAiSettings} disabled={!hasSavedAiKey && !aiApiKey}><Trash2 size={16} /> Remove</button></div>
                 </section>
 
                 <section className="settings-card">
