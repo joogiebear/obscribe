@@ -33,6 +33,25 @@ const aiLimits = {
 };
 
 const aiSummaryCacheKey = 'obscribe-ai-summary-cache';
+const activeSelectionKey = 'obscribe-active-selection';
+
+type ActiveSelection = { notebookId?: string; sectionId?: string; pageId?: string };
+
+function readActiveSelection(): ActiveSelection {
+  try {
+    return JSON.parse(localStorage.getItem(activeSelectionKey) || '{}') as ActiveSelection;
+  } catch {
+    return {};
+  }
+}
+
+function writeActiveSelection(selection: ActiveSelection) {
+  try {
+    localStorage.setItem(activeSelectionKey, JSON.stringify(selection));
+  } catch {
+    // Ignore private-mode/storage failures; selection restore is just a convenience.
+  }
+}
 
 type CachedSummary = { pageId: string; summary: string; createdAt: string; pageUpdatedAt: string };
 
@@ -321,6 +340,11 @@ export default function ObscribeApp() {
   }, []);
 
   useEffect(() => {
+    if (!ready || !activeNotebookId) return;
+    writeActiveSelection({ notebookId: activeNotebookId, sectionId: activeSectionId, pageId: activePageId });
+  }, [ready, activeNotebookId, activeSectionId, activePageId]);
+
+  useEffect(() => {
     if (!showTrash || trashLoaded || trashLoading) return;
     setTrashLoading(true);
     refreshTrash()
@@ -414,12 +438,19 @@ export default function ObscribeApp() {
     setNotebooks(books);
     setSections(secs);
     setPages(pgs);
-    const firstBook = books[0];
-    const firstSection = secs.find((s) => s.notebookId === firstBook?.id);
-    const firstPage = pgs.find((p) => p.sectionId === firstSection?.id) ?? pgs.find((p) => p.notebookId === firstBook?.id);
+    const saved = readActiveSelection();
+    const savedPage = saved.pageId ? pgs.find((page) => page.id === saved.pageId) : undefined;
+    const savedSection = saved.sectionId ? secs.find((section) => section.id === saved.sectionId) : undefined;
+    const savedNotebook = saved.notebookId ? books.find((notebook) => notebook.id === saved.notebookId) : undefined;
+    const firstBook = savedPage ? books.find((book) => book.id === savedPage.notebookId) : savedSection ? books.find((book) => book.id === savedSection.notebookId) : savedNotebook ?? books[0];
+    const bookPages = pgs.filter((page) => page.notebookId === firstBook?.id);
+    const bookSections = secs.filter((section) => section.notebookId === firstBook?.id);
+    const firstPage = savedPage?.notebookId === firstBook?.id ? savedPage : bookPages[0];
+    const firstSection = firstPage ? bookSections.find((section) => section.id === firstPage.sectionId) : savedSection?.notebookId === firstBook?.id ? savedSection : bookSections[0];
+    const selectedPage = firstPage?.sectionId === firstSection?.id ? firstPage : pgs.find((page) => page.sectionId === firstSection?.id);
     setActiveNotebookId(firstBook?.id);
     setActiveSectionId(firstSection?.id);
-    setActivePageId(firstPage?.id);
+    setActivePageId(selectedPage?.id);
   }
 
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId);
