@@ -44,9 +44,9 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .notebook-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 190px); }
 .pages-panel { border-right: 1px solid var(--line); background: #eee4d5; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .page-create { width: 100%; margin-bottom: 6px; background: #3a332c; box-shadow: none; }
-.page-row { border: 1px solid transparent; border-radius: 12px; display: grid; grid-template-columns: 1fr auto; align-items: center; }
-.page-row:hover { background: rgba(255,255,255,.42); }
-.page-row.active { background: var(--paper); border-color: var(--line); box-shadow: 0 8px 24px rgba(48,38,24,.08); }
+.page-row { border: 1px solid rgba(222,213,200,.78); border-radius: 12px; display: grid; grid-template-columns: 1fr auto; align-items: center; background: rgba(255,250,240,.42); box-shadow: 0 1px 0 rgba(48,38,24,.03); }
+.page-row:hover { background: rgba(255,255,255,.68); border-color: rgba(190,177,160,.92); }
+.page-row.active { background: var(--paper); border-color: var(--accent); box-shadow: 0 8px 24px rgba(48,38,24,.08); }
 .page-link { min-width: 0; border: 0; background: transparent; color: var(--ink); text-align: left; padding: 11px 12px; border-radius: 12px; display: grid; gap: 3px; }
 .page-link small { color: var(--muted); min-height: 1em; }
 .icon-danger { border: 0; background: transparent; color: #9f5b4d; width: 34px; height: 34px; border-radius: 10px; display: inline-grid; place-items: center; opacity: .66; }
