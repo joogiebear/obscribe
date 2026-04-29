@@ -479,6 +479,26 @@ export default function ObscribeApp() {
     setPages((prev) => prev.map((item) => item.id === page.id ? { ...item, title, titleSource: 'manual', updatedAt } : item));
   }
 
+  async function updatePageTitle(page: PageRecord, titleValue: string) {
+    const title = titleValue.trim() || 'Untitled';
+    if (title === page.title && page.titleSource === 'manual') return;
+    const updatedAt = new Date().toISOString();
+    setSaveState('saving');
+    setPages((prev) => prev.map((item) => item.id === page.id ? { ...item, title, titleSource: 'manual', updatedAt } : item));
+    try {
+      if (isCloudMode && supabase) {
+        const { error } = await supabase.from('pages').update({ title, title_source: 'manual', updated_at: updatedAt }).eq('id', page.id);
+        if (error) throw error;
+      } else {
+        await db.pages.update(page.id, { title, titleSource: 'manual', updatedAt });
+      }
+      setSaveState('saved');
+    } catch (error: unknown) {
+      setSaveState('error');
+      setOperationError(`Title save failed: ${errorMessage(error)}`);
+    }
+  }
+
   async function deletePage(page: PageRecord) {
     if (!confirm(`Move page “${page.title}” to Trash?`)) return;
     const trashedAt = new Date().toISOString();
@@ -689,7 +709,7 @@ export default function ObscribeApp() {
 
           <article className="paper">
             {activePage ? <>
-              <div className="paper-title"><BookOpen size={18} /><span>{activePage.title}</span></div>
+              <div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div>
               <Editor key={activePage.id} content={activePage.content} onChange={(doc) => savePageContent(activePage, doc)} />
             </> : <div className="empty"><h2>No page selected</h2><p>Create a page to start writing in this section.</p><button onClick={() => createPage()}>Create page</button></div>}
           </article>

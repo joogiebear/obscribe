@@ -1,31 +1,76 @@
 'use client';
 
-import { useEffect } from 'react';
-import { EditorContent, useEditor, type JSONContent } from '@tiptap/react';
+import { useEffect, useState } from 'react';
+import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type JSONContent, type NodeViewProps } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Typography from '@tiptap/extension-typography';
+import { Node } from '@tiptap/core';
+import { Lightbulb, ListTodo, Minus, Quote, Sparkles, TextQuote, TriangleAlert } from 'lucide-react';
 
 type Props = {
   content: JSONContent;
   onChange: (content: JSONContent) => void;
 };
 
+const Callout = Node.create({
+  name: 'callout',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  addAttributes() {
+    return {
+      kind: { default: 'note' }
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-type="callout"]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { ...HTMLAttributes, 'data-type': 'callout', 'data-kind': HTMLAttributes.kind }, 0];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(CalloutView);
+  }
+});
+
+function CalloutView({ node }: NodeViewProps) {
+  const kind = node.attrs.kind ?? 'note';
+  const icon = kind === 'idea' ? '💡' : kind === 'warning' ? '⚠️' : kind === 'question' ? '❓' : '📝';
+  return (
+    <NodeViewWrapper className={`callout-block ${kind}`} data-type="callout" data-kind={kind}>
+      <div className="callout-icon">{icon}</div>
+      <NodeViewContent className="callout-content" />
+    </NodeViewWrapper>
+  );
+}
+
 export default function Editor({ content, onChange }: Props) {
+  const [slashOpen, setSlashOpen] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Typography,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: 'Start writing. Try / for ideas, #tags, or [[page links]] soon…' })
+      Callout,
+      Placeholder.configure({ placeholder: 'Start writing. Try / for blocks, #tags, or [[page links]] soon…' })
     ],
     content,
     immediatelyRender: false,
     editorProps: {
-      attributes: { class: 'prose-page' }
+      attributes: { class: 'prose-page' },
+      handleTextInput(_view, _from, _to, text) {
+        if (text === '/') setSlashOpen(true);
+        return false;
+      },
+      handleKeyDown(_view, event) {
+        if (event.key === 'Escape') setSlashOpen(false);
+        return false;
+      }
     },
     onUpdate: ({ editor }) => onChange(editor.getJSON())
   });
@@ -37,5 +82,27 @@ export default function Editor({ content, onChange }: Props) {
     if (current !== next) editor.commands.setContent(content);
   }, [content, editor]);
 
-  return <EditorContent editor={editor} />;
+  function runSlash(action: () => void) {
+    if (!editor) return;
+    editor.chain().focus().deleteRange({ from: Math.max(editor.state.selection.from - 1, 0), to: editor.state.selection.from }).run();
+    action();
+    setSlashOpen(false);
+  }
+
+  const slashItems = [
+    { label: 'Heading', icon: <TextQuote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleHeading({ level: 2 }).run()) },
+    { label: 'Todo', icon: <ListTodo size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleTaskList().run()) },
+    { label: 'Quote', icon: <Quote size={16} />, action: () => runSlash(() => editor?.chain().focus().toggleBlockquote().run()) },
+    { label: 'Divider', icon: <Minus size={16} />, action: () => runSlash(() => editor?.chain().focus().setHorizontalRule().run()) },
+    { label: 'Note callout', icon: <Sparkles size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'note' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] }).run()) },
+    { label: 'Idea callout', icon: <Lightbulb size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'idea' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Idea' }] }] }).run()) },
+    { label: 'Warning callout', icon: <TriangleAlert size={16} />, action: () => runSlash(() => editor?.chain().focus().insertContent({ type: 'callout', attrs: { kind: 'warning' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Warning' }] }] }).run()) }
+  ];
+
+  return (
+    <div className="editor-wrap">
+      {slashOpen && <div className="slash-menu">{slashItems.map((item) => <button key={item.label} onMouseDown={(event) => { event.preventDefault(); item.action(); }}>{item.icon}{item.label}</button>)}</div>}
+      <EditorContent editor={editor} />
+    </div>
+  );
 }
