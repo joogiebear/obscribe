@@ -28,6 +28,10 @@ const alphaLimits = {
   pageTitleChars: 160
 };
 
+const aiLimits = {
+  summarizeChars: 8_000
+};
+
 function jsonBytes(value: unknown) {
   return new TextEncoder().encode(JSON.stringify(value)).length;
 }
@@ -558,6 +562,7 @@ export default function ObscribeApp() {
   async function summarizeActivePage() {
     if (!activePage) return;
     if (!activePage.plainText.trim()) { setOperationError('Write something on this page before summarizing.'); return; }
+    if (activePage.plainText.length > aiLimits.summarizeChars) { setOperationError(`Summary is capped at ${aiLimits.summarizeChars.toLocaleString()} characters to keep API costs low. Split or shorten this page first.`); return; }
     if (!supabase || !user) { setOperationError('Sign in and sync an AI key before using summaries.'); return; }
     setAiBusy(true);
     setAiSummary('');
@@ -948,7 +953,7 @@ export default function ObscribeApp() {
 
           <article className="paper">
             {activePage ? <>
-              <div className="paper-header"><div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div><button className="ai-action" onClick={summarizeActivePage} disabled={aiBusy || !activePage.plainText.trim()}><Sparkles size={15} /> {aiBusy ? 'Summarizing…' : 'Summarize'}</button></div>
+              <div className="paper-header"><div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div><div className="ai-actions"><button className="ai-action" onClick={summarizeActivePage} disabled={aiBusy || !activePage.plainText.trim() || activePage.plainText.length > aiLimits.summarizeChars}><Sparkles size={15} /> {aiBusy ? 'Summarizing…' : 'Summarize'}</button><small>Low-cost summary · max {aiLimits.summarizeChars.toLocaleString()} chars</small></div></div>
               {aiSummary && <section className="ai-result"><p className="eyebrow">AI summary</p><div>{aiSummary}</div></section>}
               {activePageIsBlank && <div className="starter-inserts" aria-label="Page starters">
                 <span>Start with</span>

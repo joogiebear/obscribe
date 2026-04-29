@@ -11,6 +11,7 @@ type KeyResult = { provider: AiProvider; apiKey: string } | { error: NextRespons
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const vaultSecret = process.env.AI_VAULT_ENCRYPTION_KEY;
+const summarizeCharLimit = 8_000;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status });
@@ -48,16 +49,17 @@ async function loadProviderKey(request: NextRequest): Promise<KeyResult> {
 }
 
 async function summarizeWithOpenAI(apiKey: string, title: string, text: string) {
+  const trimmedText = text.slice(0, summarizeCharLimit);
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'gpt-4.1-mini',
+      model: 'gpt-4.1-nano',
       input: [
-        { role: 'system', content: 'You summarize notebook pages clearly and concisely. Return only the summary text. Use short bullets when useful.' },
-        { role: 'user', content: `Title: ${title || 'Untitled'}\n\nPage text:\n${text.slice(0, 24000)}` }
+        { role: 'system', content: 'You summarize notebook pages clearly and concisely. Return only the summary text. Use at most 5 short bullets.' },
+        { role: 'user', content: `Title: ${title || 'Untitled'}\n\nPage text, capped at ${summarizeCharLimit} characters:\n${trimmedText}` }
       ],
-      max_output_tokens: 450
+      max_output_tokens: 220
     })
   });
   const payload = await response.json().catch(() => null) as { output_text?: string; error?: { message?: string }; output?: Array<{ content?: Array<{ text?: string }> }> } | null;
@@ -71,6 +73,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as { title?: string; text?: string };
     const text = body.text?.trim() ?? '';
     if (text.length < 20) return json({ error: 'Write a little more on this page before summarizing.' }, 400);
+    if (text.length > summarizeCharLimit) return json({ error: `This page is ${text.length.toLocaleString()} characters. Summary is currently capped at ${summarizeCharLimit.toLocaleString()} characters to keep costs low. Split the page or shorten it before summarizing.` }, 400);
     const key = await loadProviderKey(request);
     if ('error' in key) return key.error;
     if (key.provider !== 'openai') return json({ error: 'Summarize is currently wired for OpenAI keys first. Other providers are next.' }, 400);
