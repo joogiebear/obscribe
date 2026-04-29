@@ -180,10 +180,10 @@ export default function ObscribeApp() {
 
   async function loadCloudWorkspace(userId: string) {
     if (!supabase) return;
-    const { data: notebookRows, error: notebookError } = await supabase.from('notebooks').select('*').is('trashed_at', null).order('sort_order');
-    if (notebookError) throw notebookError;
+    const { count: totalNotebookCount, error: notebookCountError } = await supabase.from('notebooks').select('id', { count: 'exact', head: true });
+    if (notebookCountError) throw notebookCountError;
 
-    if (!notebookRows?.length) {
+    if (!totalNotebookCount) {
       await createCloudStarterWorkspace(userId);
     }
 
@@ -565,6 +565,27 @@ export default function ObscribeApp() {
     await refreshTrash();
   }
 
+  async function clearTrash() {
+    if (!trashCount) return;
+    if (!confirm(`Permanently delete ${trashCount} trashed item${trashCount === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    const notebookIds = trashedNotebooks.map((item) => item.id);
+    const sectionIds = trashedSections.map((item) => item.id);
+    const pageIds = trashedPages.map((item) => item.id);
+
+    if (isCloudMode && supabase) {
+      if (pageIds.length) await supabase.from('pages').delete().in('id', pageIds).throwOnError();
+      if (sectionIds.length) await supabase.from('sections').delete().in('id', sectionIds).throwOnError();
+      if (notebookIds.length) await supabase.from('notebooks').delete().in('id', notebookIds).throwOnError();
+    } else {
+      await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+        if (pageIds.length) await db.pages.bulkDelete(pageIds);
+        if (sectionIds.length) await db.sections.bulkDelete(sectionIds);
+        if (notebookIds.length) await db.notebooks.bulkDelete(notebookIds);
+      });
+    }
+    await refreshTrash();
+  }
+
   const trashCount = trashedNotebooks.length + trashedSections.length + trashedPages.length;
 
 
@@ -609,7 +630,7 @@ export default function ObscribeApp() {
 
         {showTrash ? (
           <section className="trash-panel">
-            <div className="trash-header"><h2>Trash</h2><p>Restore items or permanently delete them.</p></div>
+            <div className="trash-header"><div><h2>Trash</h2><p>Restore items or permanently delete them.</p></div><button className="ghost-button compact" disabled={!trashCount} onClick={clearTrash}><Trash2 size={14} /> Clear Trash</button></div>
             {trashCount === 0 && <div className="empty compact-empty"><h2>Trash is empty</h2><p>Deleted notebooks, sections, and pages will show up here.</p></div>}
             {!!trashedNotebooks.length && <div className="trash-group"><h3>Notebooks</h3>{trashedNotebooks.map((item) => <div key={item.id} className="trash-row"><span>{item.name}</span><div><button className="ghost-button compact" onClick={() => restoreItem('notebook', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('notebook', item.id, item.name)}><XCircle size={15} /></button></div></div>)}</div>}
             {!!trashedSections.length && <div className="trash-group"><h3>Sections</h3>{trashedSections.map((item) => <div key={item.id} className="trash-row"><span>{item.name}</span><div><button className="ghost-button compact" onClick={() => restoreItem('section', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('section', item.id, item.name)}><XCircle size={15} /></button></div></div>)}</div>}
