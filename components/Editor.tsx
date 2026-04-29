@@ -92,7 +92,7 @@ export default function Editor({ content, onChange }: Props) {
           const spaceBelow = window.innerHeight - coords.bottom;
           const placement = spaceBelow < 280 ? 'above' : 'below';
           setSlashPosition({ top: (placement === 'above' ? coords.top : coords.bottom) - editorBox.top + (placement === 'above' ? -8 : 8), left: Math.max(0, coords.left - editorBox.left), placement });
-          setSlashFrom(to);
+          setSlashFrom(to - 1);
           setSlashQuery('');
           setSlashOpen(true);
         }
@@ -117,7 +117,7 @@ export default function Editor({ content, onChange }: Props) {
         setSlashQuery('');
         return;
       }
-      const text = editor.state.doc.textBetween(slashFrom, cursor, undefined, '\ufffc');
+      const text = editor.state.doc.textBetween(slashFrom + 1, cursor, undefined, '\ufffc');
       if (/\s/.test(text)) {
         setSlashOpen(false);
         setSlashFrom(null);
@@ -143,9 +143,9 @@ export default function Editor({ content, onChange }: Props) {
     if (!editor || slashFrom === null) return null;
     const cursor = editor.state.selection.from;
     if (cursor < slashFrom) return null;
-    const query = editor.state.doc.textBetween(slashFrom, cursor, undefined, '\ufffc');
+    const query = editor.state.doc.textBetween(slashFrom + 1, cursor, undefined, '\ufffc');
     if (/\s/.test(query)) return null;
-    return { from: slashFrom - 1, to: cursor };
+    return { from: slashFrom, to: cursor };
   }
 
   function runSlash(action: () => void) {
