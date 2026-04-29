@@ -187,6 +187,36 @@ function starterPageContent(kind: StarterPageKind): { title: string; content: JS
   };
 }
 
+function summaryDoc(summary: string): JSONContent {
+  const lines = summary.split('\n').map((line) => line.trim()).filter(Boolean);
+  const content: JSONContent[] = [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Summary' }] }];
+  const bulletItems = lines
+    .map((line) => line.replace(/^[-*•]\s*/, '').trim())
+    .filter(Boolean);
+
+  if (bulletItems.length > 1) {
+    content.push({
+      type: 'bulletList',
+      content: bulletItems.map((line) => ({ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: line }] }] }))
+    });
+  } else {
+    content.push(...(bulletItems.length ? bulletItems : [summary]).map((line) => ({ type: 'paragraph', content: [{ type: 'text', text: line }] })));
+  }
+
+  return { type: 'doc', content };
+}
+
+function appendSummaryDoc(page: PageRecord, summary: string): JSONContent {
+  return {
+    type: 'doc',
+    content: [
+      ...(page.content.content?.length ? page.content.content : [{ type: 'paragraph' }]),
+      { type: 'horizontalRule' },
+      ...(summaryDoc(summary).content ?? [])
+    ]
+  };
+}
+
 export default function ObscribeApp() {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -483,6 +513,29 @@ export default function ObscribeApp() {
     }, 750);
   }
 
+  async function persistPageContent(page: PageRecord, content: JSONContent, titleSource: PageRecord['titleSource'] = page.titleSource) {
+    if (jsonBytes(content) > alphaLimits.pageContentBytes) {
+      throw new Error(`Page is too large to save. Limit is about ${Math.round(alphaLimits.pageContentBytes / 1000)}KB of editor content.`);
+    }
+    const plainText = textFromDoc(content);
+    const derived = titleSource === 'manual' ? { title: page.title, source: titleSource } : titleFromText(plainText);
+    const updatedAt = new Date().toISOString();
+    const updated: PageRecord = { ...page, content, plainText, title: derived.title, titleSource: derived.source, tags: tagsFromText(plainText), updatedAt };
+
+    setPages((prev) => prev.map((item) => item.id === page.id ? updated : item));
+    setSaveState('saving');
+    setOperationError(null);
+
+    if (saveTimers.current[page.id]) clearTimeout(saveTimers.current[page.id]);
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('pages').update({ title: updated.title, title_source: updated.titleSource, content: updated.content, plain_text: updated.plainText, tags: updated.tags, updated_at: updatedAt }).eq('id', updated.id);
+      if (error) throw error;
+    } else {
+      await db.pages.put(updated);
+    }
+    setSaveState('saved');
+  }
+
   async function applyStarterPage(page: PageRecord, kind: StarterPageKind) {
     try {
       const starter = starterPageContent(kind);
@@ -583,6 +636,30 @@ export default function ObscribeApp() {
       setOperationError(errorMessage(error));
     } finally {
       setAiBusy(false);
+    }
+  }
+
+  async function replacePageWithSummary() {
+    if (!activePage || !aiSummary) return;
+    askConfirm({
+      title: 'Replace page with summary?',
+      body: 'This will replace the current page content with the AI summary. You can still edit it afterward, but the original text will be overwritten.',
+      confirmLabel: 'Replace Page',
+      onConfirm: async () => {
+        await persistPageContent(activePage, summaryDoc(aiSummary), 'manual');
+        setAiSummary('');
+      }
+    });
+  }
+
+  async function appendSummaryToPage() {
+    if (!activePage || !aiSummary) return;
+    try {
+      await persistPageContent(activePage, appendSummaryDoc(activePage, aiSummary), activePage.titleSource);
+      setAiSummary('');
+    } catch (error: unknown) {
+      setSaveState('error');
+      setOperationError(`Couldn’t append summary: ${errorMessage(error)}`);
     }
   }
 
@@ -954,7 +1031,7 @@ export default function ObscribeApp() {
           <article className="paper">
             {activePage ? <>
               <div className="paper-header"><div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div><div className="ai-actions"><button className="ai-action" onClick={summarizeActivePage} disabled={aiBusy || !activePage.plainText.trim() || activePage.plainText.length > aiLimits.summarizeChars}><Sparkles size={15} /> {aiBusy ? 'Summarizing…' : 'Summarize'}</button><small>Low-cost summary · max {aiLimits.summarizeChars.toLocaleString()} chars</small></div></div>
-              {aiSummary && <section className="ai-result"><p className="eyebrow">AI summary</p><div>{aiSummary}</div></section>}
+              {aiSummary && <section className="ai-result"><p className="eyebrow">AI summary</p><div>{aiSummary}</div><div className="ai-result-actions"><button className="ghost-button compact" onClick={appendSummaryToPage}>Append summary</button><button className="new compact" onClick={replacePageWithSummary}>Replace page with summary</button></div></section>}
               {activePageIsBlank && <div className="starter-inserts" aria-label="Page starters">
                 <span>Start with</span>
                 {starterPageOptions.map((option) => {
