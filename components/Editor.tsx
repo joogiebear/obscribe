@@ -50,7 +50,7 @@ function CalloutView({ node }: NodeViewProps) {
 export default function Editor({ content, onChange }: Props) {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
-  const [slashPosition, setSlashPosition] = useState({ top: 10, left: 8 });
+  const [slashPosition, setSlashPosition] = useState({ top: 10, left: 8, placement: 'below' as 'below' | 'above' });
 
   const editor = useEditor({
     extensions: [
@@ -69,7 +69,9 @@ export default function Editor({ content, onChange }: Props) {
         if (text === '/') {
           const coords = view.coordsAtPos(to);
           const editorBox = view.dom.getBoundingClientRect();
-          setSlashPosition({ top: coords.bottom - editorBox.top + 8, left: Math.max(0, coords.left - editorBox.left) });
+          const spaceBelow = window.innerHeight - coords.bottom;
+          const placement = spaceBelow < 280 ? 'above' : 'below';
+          setSlashPosition({ top: (placement === 'above' ? coords.top : coords.bottom) - editorBox.top + (placement === 'above' ? -8 : 8), left: Math.max(0, coords.left - editorBox.left), placement });
           setSlashQuery('');
           setSlashOpen(true);
         }
@@ -141,7 +143,7 @@ export default function Editor({ content, onChange }: Props) {
 
   return (
     <div className="editor-wrap">
-      {slashOpen && <div className="slash-menu" style={{ top: slashPosition.top, left: slashPosition.left }}>{filteredSlashItems.length ? filteredSlashItems.map((item) => <button key={item.label} onMouseDown={(event) => { event.preventDefault(); item.action(); }}>{item.icon}{item.label}</button>) : <p>No blocks found</p>}</div>}
+      {slashOpen && <div className={`slash-menu ${slashPosition.placement}`} style={{ top: slashPosition.top, left: slashPosition.left }}>{filteredSlashItems.length ? filteredSlashItems.map((item) => <button key={item.label} onMouseDown={(event) => { event.preventDefault(); item.action(); }}>{item.icon}{item.label}</button>) : <p>No blocks found</p>}</div>}
       <EditorContent editor={editor} />
     </div>
   );
