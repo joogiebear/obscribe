@@ -18,6 +18,13 @@ function userAvatar(user: User | null) {
   return typeof user?.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : '';
 }
 
+function accountName(user: User | null) {
+  const name = userName(user).trim();
+  if (name) return name;
+  const email = user?.email ?? '';
+  return email.includes('@') ? email.split('@')[0] : 'Obscribe user';
+}
+
 export default function AuthPanel() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -92,6 +99,7 @@ export default function AuthPanel() {
 
   if (user) {
     const name = userName(user);
+    const visibleName = accountName(user);
     const avatar = userAvatar(user);
     return (
       <>
@@ -99,8 +107,8 @@ export default function AuthPanel() {
           <div className="account-main">
             <div className="avatar">{avatar ? <img src={avatar} alt="" /> : avatarLabel(user.email, name)}</div>
             <div className="account-copy">
-              <strong title={name || user.email}>{name || user.email}</strong>
-              <span>{user.email}</span>
+              <strong title={visibleName}>{visibleName}</strong>
+              <span>Cloud Alpha enabled</span>
             </div>
           </div>
           <div className="sidebar-auth-actions">
@@ -126,8 +134,8 @@ export default function AuthPanel() {
                 <section className="settings-card profile-card">
                   <div className="settings-card-title"><UserCircle size={18} /><h3>Profile</h3></div>
                   <div className="profile-preview">
-                    <div className="avatar large">{avatarUrl ? <img src={avatarUrl} alt="" /> : avatarLabel(user.email, displayName)}</div>
-                    <div><strong>{displayName || 'Obscribe user'}</strong><span>{user.email}</span></div>
+                    <div className="avatar large">{avatarUrl ? <img src={avatarUrl} alt="" /> : avatarLabel(user.email, displayName || visibleName)}</div>
+                    <div><strong>{displayName || visibleName}</strong><span>Profile visible in Obscribe</span></div>
                   </div>
                   <label className="modal-field">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="What should Obscribe call you?" /></label>
                   <label className="modal-field">Avatar image URL<input value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://example.com/avatar.png" /></label>
