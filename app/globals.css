@@ -261,6 +261,8 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .profile-preview strong, .profile-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-preview span { color: var(--muted); font-size: 13px; }
 .settings-message { margin: 14px 0 0; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,250,240,.7); padding: 10px 12px; color: var(--muted); }
+.settings-message.inline { margin-top: 0; background: #fff7df; border-color: #e8cf9a; color: #6b4a13; }
+.settings-message.desktop-message { display: none; }
 @media (max-width: 760px) { .settings-grid { grid-template-columns: 1fr; } .settings-card.profile-card { grid-row: auto; } .settings-header { align-items: stretch; } }
 /* Settings modal contrast fixes */
 .settings-modal { color: var(--ink); }

@@ -168,13 +168,16 @@ export default function AuthPanel() {
   }
 
   async function saveAiSettings() {
-    if (!aiApiKey.trim()) return;
+    if (!aiApiKey.trim()) {
+      setSettingsMessage('Paste an API key before saving.');
+      return;
+    }
     if (aiPassphrase.length < 8) {
       setSettingsMessage('Use an encryption passphrase with at least 8 characters.');
       return;
     }
     setSettingsBusy(true);
-    setSettingsMessage(null);
+    setSettingsMessage('Encrypting and saving your AI key on this device…');
     try {
       const vault = await encryptAiKey(aiProvider, aiApiKey.trim(), aiPassphrase);
       localStorage.setItem(aiVaultKey, JSON.stringify(vault));
@@ -182,9 +185,11 @@ export default function AuthPanel() {
       localStorage.removeItem(legacyAiApiKey);
       setHasSavedAiKey(true);
       setAiKeyUnlocked(true);
+      setAiPassphrase('');
       setSettingsMessage(`${aiProviderLabels[aiProvider]} encrypted and saved on this device.`);
-    } catch {
-      setSettingsMessage('Could not encrypt AI key in this browser.');
+    } catch (error) {
+      console.error('Failed to encrypt AI key', error);
+      setSettingsMessage('Could not encrypt AI key in this browser. Check that storage is allowed for obscribe.com.');
     } finally {
       setSettingsBusy(false);
     }
@@ -320,7 +325,8 @@ export default function AuthPanel() {
                   <label className="modal-field">API key<input type="password" value={aiApiKey} onChange={(event) => { setAiApiKey(event.target.value); setAiKeyUnlocked(Boolean(event.target.value)); }} placeholder={hasSavedAiKey && !aiKeyUnlocked ? 'Encrypted key saved — unlock to view or replace' : 'Paste provider API key'} autoComplete="off" /></label>
                   <label className="modal-field">Encryption passphrase<input type="password" value={aiPassphrase} onChange={(event) => setAiPassphrase(event.target.value)} placeholder="Not saved by Obscribe" autoComplete="off" /></label>
                   <p className="settings-note">Alpha note: the API key is encrypted with your passphrase before being stored locally in this browser. Obscribe does not save the passphrase, so you’ll need it to unlock the key on this device.</p>
-                  <div className="settings-actions"><button className="new" onClick={saveAiSettings} disabled={settingsBusy || !aiApiKey.trim()}><Save size={16} /> Encrypt & save</button><button className="ghost-button" onClick={unlockAiSettings} disabled={settingsBusy || !hasSavedAiKey || !aiPassphrase}>Unlock</button><button className="ghost-button" onClick={clearAiSettings} disabled={!hasSavedAiKey && !aiApiKey}><Trash2 size={16} /> Remove</button></div>
+                  <div className="settings-actions"><button className="new" onClick={saveAiSettings} disabled={settingsBusy || !aiApiKey.trim()}><Save size={16} /> {settingsBusy ? 'Saving…' : 'Encrypt & save'}</button><button className="ghost-button" onClick={unlockAiSettings} disabled={settingsBusy || !hasSavedAiKey || !aiPassphrase}>Unlock</button><button className="ghost-button" onClick={clearAiSettings} disabled={!hasSavedAiKey && !aiApiKey}><Trash2 size={16} /> Remove</button></div>
+                  {settingsMessage && <p className="settings-message inline">{settingsMessage}</p>}
                 </section>
 
                 <section className="settings-card">
@@ -329,7 +335,7 @@ export default function AuthPanel() {
                   <button className="ghost-button" disabled>Customize soon</button>
                 </section>
               </div>
-              {settingsMessage && <p className="settings-message">{settingsMessage}</p>}
+              {settingsMessage && <p className="settings-message desktop-message">{settingsMessage}</p>}
             </section>
           </div>
         )}
