@@ -263,6 +263,8 @@ export default function ObscribeApp() {
   const [operationError, setOperationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [showTrash, setShowTrash] = useState(false);
+  const [trashLoaded, setTrashLoaded] = useState(false);
+  const [trashLoading, setTrashLoading] = useState(false);
   const [trashedNotebooks, setTrashedNotebooks] = useState<Notebook[]>([]);
   const [trashedSections, setTrashedSections] = useState<Section[]>([]);
   const [trashedPages, setTrashedPages] = useState<PageRecord[]>([]);
@@ -318,7 +320,20 @@ export default function ObscribeApp() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!showTrash || trashLoaded || trashLoading) return;
+    setTrashLoading(true);
+    refreshTrash()
+      .catch((error: unknown) => setOperationError(`Couldn’t load Trash: ${errorMessage(error)}`))
+      .finally(() => setTrashLoading(false));
+  }, [showTrash, trashLoaded, trashLoading]);
+
   async function loadWorkspace(currentUser: User | null) {
+    setShowTrash(false);
+    setTrashLoaded(false);
+    setTrashedNotebooks([]);
+    setTrashedSections([]);
+    setTrashedPages([]);
     if (currentUser && supabase) {
       await loadCloudWorkspace(currentUser.id);
     } else {
@@ -346,11 +361,11 @@ export default function ObscribeApp() {
       allBooks = [notebook];
       books = [notebook];
     }
-    const allSecs = await db.sections.orderBy('order').toArray();
-    const allPgs = await db.pages.orderBy('order').toArray();
-    setTrashedNotebooks(allSecs.length || allPgs.length || allBooks.length ? allBooks.filter((book) => book.trashedAt) : []);
-    setTrashedSections(allSecs.filter((section) => section.trashedAt));
-    setTrashedPages(allPgs.filter((page) => page.trashedAt));
+    const [allSecs, allPgs] = await Promise.all([
+      db.sections.orderBy('order').toArray(),
+      db.pages.orderBy('order').toArray()
+    ]);
+    setTrashLoaded(false);
     setWorkspace(books, allSecs.filter((section) => !section.trashedAt), allPgs.filter((page) => !page.trashedAt));
   }
 
@@ -376,15 +391,7 @@ export default function ObscribeApp() {
     if (pError) throw pError;
 
     setWorkspace((cloudNotebooks ?? []).map(toNotebook), (cloudSections ?? []).map(toSection), (cloudPages ?? []).map(toPage));
-
-    const [{ data: trashBooks }, { data: trashSections }, { data: trashPages }] = await Promise.all([
-      supabase.from('notebooks').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false }),
-      supabase.from('sections').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false }),
-      supabase.from('pages').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false })
-    ]);
-    setTrashedNotebooks((trashBooks ?? []).map(toNotebook));
-    setTrashedSections((trashSections ?? []).map(toSection));
-    setTrashedPages((trashPages ?? []).map(toPage));
+    setTrashLoaded(false);
   }
 
   async function createCloudStarterWorkspace(userId: string) {
@@ -730,6 +737,7 @@ export default function ObscribeApp() {
       setTrashedNotebooks((trashBooks ?? []).map(toNotebook));
       setTrashedSections((trashSections ?? []).map(toSection));
       setTrashedPages((trashPages ?? []).map(toPage));
+      setTrashLoaded(true);
       return;
     }
     const [allBooks, allSecs, allPgs] = await Promise.all([
@@ -740,6 +748,7 @@ export default function ObscribeApp() {
     setTrashedNotebooks(allBooks.filter((notebook) => notebook.trashedAt));
     setTrashedSections(allSecs.filter((section) => section.trashedAt));
     setTrashedPages(allPgs.filter((page) => page.trashedAt));
+    setTrashLoaded(true);
   }
 
   async function refreshWorkspaceAndTrash() {
@@ -1052,7 +1061,7 @@ export default function ObscribeApp() {
       <aside className="shelf">
         <div className="brand"><Sparkles size={18} /> Obscribe</div>
         <button className="new" onClick={openNotebookModal}><Plus size={16} /> Notebook</button>
-        <button className={showTrash ? "trash-toggle active" : "trash-toggle"} onClick={() => setShowTrash((value) => !value)}><Trash2 size={15} /> Trash {trashCount ? `(${trashCount})` : ""}</button>
+        <button className={showTrash ? "trash-toggle active" : "trash-toggle"} onClick={() => setShowTrash((value) => !value)}><Trash2 size={15} /> Trash {trashLoaded && trashCount ? `(${trashCount})` : ""}</button>
         <div className="books">
           {notebooks.map((book) => (
             <div key={book.id} className={book.id === activeNotebookId ? 'book-row active' : 'book-row'}>
@@ -1102,8 +1111,9 @@ export default function ObscribeApp() {
 
         {showTrash ? (
           <section className="trash-panel">
-            <div className="trash-header"><div><h2>Trash</h2><p>Restore items or permanently delete them.</p></div><button className="ghost-button compact" disabled={!trashCount} onClick={clearTrash}><Trash2 size={14} /> Clear Trash</button></div>
-            {trashCount === 0 && <div className="empty compact-empty"><h2>Trash is empty</h2><p>Deleted notebooks, sections, and pages will show up here.</p></div>}
+            <div className="trash-header"><div><h2>Trash</h2><p>Restore items or permanently delete them.</p></div><button className="ghost-button compact" disabled={trashLoading || !trashCount} onClick={clearTrash}><Trash2 size={14} /> Clear Trash</button></div>
+            {trashLoading && <div className="empty compact-empty"><h2>Opening Trash…</h2><p>Deleted items are loaded only when you need them.</p></div>}
+            {!trashLoading && trashCount === 0 && <div className="empty compact-empty"><h2>Trash is empty</h2><p>Deleted notebooks, sections, and pages will show up here.</p></div>}
             {!!trashedNotebooks.length && <div className="trash-group"><h3>Notebooks</h3>{trashedNotebooks.map((item) => <div key={item.id} className="trash-row"><span>{item.name}</span><div><button className="ghost-button compact" onClick={() => restoreItem('notebook', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('notebook', item.id, item.name)}><XCircle size={15} /></button></div></div>)}</div>}
             {!!trashedSections.length && <div className="trash-group"><h3>Sections</h3>{trashedSections.map((item) => <div key={item.id} className="trash-row"><span>{item.name}</span><div><button className="ghost-button compact" onClick={() => restoreItem('section', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('section', item.id, item.name)}><XCircle size={15} /></button></div></div>)}</div>}
             {!!trashedPages.length && <div className="trash-group"><h3>Pages</h3>{trashedPages.map((item) => <div key={item.id} className="trash-row"><span>{item.title}</span><div><button className="ghost-button compact" onClick={() => restoreItem('page', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('page', item.id, item.title)}><XCircle size={15} /></button></div></div>)}</div>}
