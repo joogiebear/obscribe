@@ -180,11 +180,14 @@ export default function ObscribeApp() {
 
   async function loadCloudWorkspace(userId: string) {
     if (!supabase) return;
+    const starterKey = `obscribe-cloud-starter-created:${userId}`;
+    const starterAlreadyCreated = localStorage.getItem(starterKey) === 'true';
     const { count: totalNotebookCount, error: notebookCountError } = await supabase.from('notebooks').select('id', { count: 'exact', head: true });
     if (notebookCountError) throw notebookCountError;
 
-    if (!totalNotebookCount) {
+    if (!totalNotebookCount && !starterAlreadyCreated) {
       await createCloudStarterWorkspace(userId);
+      localStorage.setItem(starterKey, 'true');
     }
 
     const [{ data: cloudNotebooks, error: nError }, { data: cloudSections, error: sError }, { data: cloudPages, error: pError }] = await Promise.all([
