@@ -64,9 +64,6 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .prose-page p { margin: 12px 0; }
 .prose-page ul, .prose-page ol { padding-left: 1.4em; }
 .prose-page blockquote { border-left: 4px solid var(--accent); margin-left: 0; padding: 8px 0 8px 18px; color: #66584c; background: rgba(255,255,255,.35); }
-.prose-page ul[data-type="taskList"] { list-style: none; padding-left: 0; }
-.prose-page li[data-type="taskItem"] { display: flex; gap: 10px; align-items: flex-start; }
-.prose-page li[data-type="taskItem"] > label { padding-top: 4px; }
 .prose-page .is-editor-empty:first-child::before { color: #a99a8d; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }
 @media (max-width: 900px) { .app { grid-template-columns: 1fr; } .shelf { position: static; } .notebook-layout { grid-template-columns: 1fr; } .pages-panel { border-right: 0; } .topbar { align-items: stretch; flex-direction: column; } .search input { min-width: 0; width: 100%; } }
 @media (max-width: 560px) { .workspace { padding: 14px; } .tabs { margin-inline: -14px; padding-left: 14px; padding-right: 14px; } .tab { padding: 9px 8px 9px 13px; font-size: 14px; } .tab-danger { width: 28px; height: 28px; } .capture { align-items: stretch; flex-wrap: wrap; } .capture input { min-width: 0; width: calc(100% - 32px); } .capture button { width: 100%; } .paper { padding: 24px 18px; } .prose-page { font-size: 16px; } }
@@ -188,32 +185,43 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .danger-button:hover { background: #873123; }
 .editor-modal-backdrop { position: fixed; }
 .editor-input-modal { text-align: left; }
-.prose-page li[data-type="taskItem"] { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
-.prose-page li[data-type="taskItem"] > label { display: inline-flex; align-items: center; padding-top: 6px; margin: 0; line-height: 1; }
-.prose-page li[data-type="taskItem"] > div { min-width: 0; }
-.prose-page li[data-type="taskItem"] > div > p { margin-top: 0; }
-.prose-page li[data-type="taskItem"] input[type="checkbox"] { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] { display: flex !important; flex-direction: row !important; align-items: flex-start !important; gap: 10px !important; }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label { flex: 0 0 auto !important; display: flex !important; align-items: center !important; padding-top: 7px !important; margin: 0 !important; }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div { flex: 1 1 auto !important; min-width: 0 !important; display: block !important; }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p:first-child { margin-top: 0 !important; }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p:last-child { margin-bottom: 0 !important; }
-.prose-page ul[data-type="taskList"] { list-style: none !important; padding-left: 0 !important; }
 .prose-page li.task-item-row { display: flex !important; flex-direction: row !important; align-items: flex-start !important; gap: 10px !important; list-style: none !important; }
-.prose-page .task-checkbox-wrap { flex: 0 0 auto !important; padding-top: 7px !important; margin: 0 !important; line-height: 1 !important; }
-.prose-page .task-item-content { flex: 1 1 auto !important; min-width: 0 !important; }
-.prose-page .task-item-content > p:first-child { margin-top: 0 !important; }
-.prose-page .task-item-content > p:last-child { margin-bottom: 0 !important; }
 /* Final task-list layout: keep Tiptap's default editable structure, only align it. */
-.prose-page ul[data-type="taskList"] { list-style: none !important; padding-left: 0 !important; }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] { display: flex !important; flex-direction: row !important; align-items: baseline !important; gap: 10px !important; list-style: none !important; }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label { flex: 0 0 auto !important; display: inline-flex !important; align-items: center !important; align-self: baseline !important; padding-top: 0 !important; margin: 0 !important; transform: translateY(2px); }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label input { margin: 0 !important; width: 16px !important; height: 16px !important; accent-color: var(--accent); }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div { flex: 1 1 auto !important; min-width: 0 !important; display: block !important; }
-.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p { margin: 0 0 8px !important; }
-.simple-todo-row { display: flex; align-items: baseline; gap: 10px; margin: 8px 0; }
-.simple-todo-checkbox { flex: 0 0 auto; display: inline-flex; align-items: center; transform: translateY(2px); }
-.simple-todo-checkbox input { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
-.simple-todo-content { flex: 1 1 auto; min-width: 0; outline: none; }
-.simple-todo-row[data-checked="true"] .simple-todo-content { color: var(--muted); text-decoration: line-through; }
-.simple-todo-content > p { margin: 0 !important; }
+
+/* Tiptap official task list styling */
+.prose-page ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+  margin: 12px 0;
+}
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 6px 0;
+}
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding-top: 7px;
+  line-height: 1;
+}
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.prose-page ul[data-type="taskList"] li[data-type="taskItem"] > div > p {
+  margin: 0 0 8px;
+}
+.prose-page ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--muted);
+  text-decoration: line-through;
+}
