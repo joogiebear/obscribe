@@ -205,6 +205,8 @@ export default function ObscribeApp() {
   const [newNotebookName, setNewNotebookName] = useState('');
   const [newNotebookColor, setNewNotebookColor] = useState(colors[0]);
   const [includeStarterSections, setIncludeStarterSections] = useState(true);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ title: string; body: string; confirmLabel: string; destructive?: boolean; onConfirm: () => Promise<void> } | null>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -349,6 +351,10 @@ export default function ObscribeApp() {
   const sectionPages = pages.filter((p) => p.sectionId === activeSectionId).sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.order - b.order);
   const activePage = pages.find((p) => p.id === activePageId);
   const activePageIsBlank = Boolean(activePage && !activePage.plainText.trim());
+
+  useEffect(() => {
+    setAiSummary('');
+  }, [activePageId]);
 
   const searchResults = useMemo(() => {
     if (!query.trim()) return [];
@@ -546,6 +552,32 @@ export default function ObscribeApp() {
       setActivePageId(page.id);
     } catch (error: unknown) {
       setOperationError(`Capture failed: ${errorMessage(error)}`);
+    }
+  }
+
+  async function summarizeActivePage() {
+    if (!activePage) return;
+    if (!activePage.plainText.trim()) { setOperationError('Write something on this page before summarizing.'); return; }
+    if (!supabase || !user) { setOperationError('Sign in and sync an AI key before using summaries.'); return; }
+    setAiBusy(true);
+    setAiSummary('');
+    setOperationError(null);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Your session expired. Sign in again before using AI actions.');
+      const response = await fetch('/api/ai/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: activePage.title, text: activePage.plainText })
+      });
+      const payload = await response.json().catch(() => ({})) as { summary?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'Could not summarize this page.');
+      setAiSummary(payload.summary || 'No summary returned.');
+    } catch (error: unknown) {
+      setOperationError(errorMessage(error));
+    } finally {
+      setAiBusy(false);
     }
   }
 
@@ -916,7 +948,8 @@ export default function ObscribeApp() {
 
           <article className="paper">
             {activePage ? <>
-              <div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div>
+              <div className="paper-header"><div className="paper-title editable-title"><BookOpen size={18} /><input value={activePage.title} maxLength={alphaLimits.pageTitleChars} onChange={(event) => setPages((prev) => prev.map((page) => page.id === activePage.id ? { ...page, title: event.target.value, titleSource: 'manual' } : page))} onBlur={(event) => updatePageTitle(activePage, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></div><button className="ai-action" onClick={summarizeActivePage} disabled={aiBusy || !activePage.plainText.trim()}><Sparkles size={15} /> {aiBusy ? 'Summarizing…' : 'Summarize'}</button></div>
+              {aiSummary && <section className="ai-result"><p className="eyebrow">AI summary</p><div>{aiSummary}</div></section>}
               {activePageIsBlank && <div className="starter-inserts" aria-label="Page starters">
                 <span>Start with</span>
                 {starterPageOptions.map((option) => {
