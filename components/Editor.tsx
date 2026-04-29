@@ -82,9 +82,21 @@ export default function Editor({ content, onChange }: Props) {
     if (current !== next) editor.commands.setContent(content);
   }, [content, editor]);
 
+  function slashRange() {
+    if (!editor) return null;
+    const { $from } = editor.state.selection;
+    const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
+    const slashIndex = textBefore.lastIndexOf('/');
+    if (slashIndex < 0) return null;
+    const query = textBefore.slice(slashIndex);
+    if (/\s/.test(query)) return null;
+    return { from: $from.pos - query.length, to: $from.pos };
+  }
+
   function runSlash(action: () => void) {
     if (!editor) return;
-    editor.chain().focus().deleteRange({ from: Math.max(editor.state.selection.from - 1, 0), to: editor.state.selection.from }).run();
+    const range = slashRange();
+    if (range) editor.chain().focus().deleteRange(range).run();
     action();
     setSlashOpen(false);
   }
