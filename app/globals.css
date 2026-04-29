@@ -128,3 +128,10 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .sidebar-auth-button.primary { background: var(--accent); border-color: var(--accent); color: white; }
 .account-strip { display: none; }
 @media (max-width: 900px) { .shelf { min-height: auto; } }
+@media (min-width: 901px) {
+  .app { height: 100vh; overflow: hidden; }
+  .shelf { height: 100vh; min-height: 0; overflow: hidden; }
+  .books { min-height: 0; overflow-y: auto; padding-right: 2px; }
+  .workspace { height: 100vh; overflow-y: auto; }
+  .sidebar-account { flex: 0 0 auto; }
+}
