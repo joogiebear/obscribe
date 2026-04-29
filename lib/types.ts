@@ -7,6 +7,7 @@ export type Notebook = {
   order: number;
   createdAt: string;
   updatedAt: string;
+  trashedAt?: string | null;
 };
 
 export type Section = {
@@ -16,6 +17,7 @@ export type Section = {
   order: number;
   createdAt: string;
   updatedAt: string;
+  trashedAt?: string | null;
 };
 
 export type PageRecord = {
@@ -31,6 +33,7 @@ export type PageRecord = {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  trashedAt?: string | null;
 };
 
 export type InboxItem = {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import MiniSearch from 'minisearch';
-import { BookOpen, Cloud, HardDrive, Inbox, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { BookOpen, CheckCircle2, Cloud, HardDrive, Inbox, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, XCircle } from 'lucide-react';
 import AuthPanel from './AuthPanel';
 import { db } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
@@ -24,6 +24,7 @@ type CloudNotebook = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  trashed_at?: string | null;
 };
 
 type CloudSection = {
@@ -33,6 +34,7 @@ type CloudSection = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  trashed_at?: string | null;
 };
 
 type CloudPage = {
@@ -48,6 +50,7 @@ type CloudPage = {
   tags: string[];
   created_at: string;
   updated_at: string;
+  trashed_at?: string | null;
 };
 
 function newId() {
@@ -55,15 +58,15 @@ function newId() {
 }
 
 function toNotebook(row: CloudNotebook): Notebook {
-  return { id: row.id, name: row.name, accentColor: row.accent_color, order: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, name: row.name, accentColor: row.accent_color, order: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at, trashedAt: row.trashed_at ?? null };
 }
 
 function toSection(row: CloudSection): Section {
-  return { id: row.id, notebookId: row.notebook_id, name: row.name, order: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, notebookId: row.notebook_id, name: row.name, order: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at, trashedAt: row.trashed_at ?? null };
 }
 
 function toPage(row: CloudPage): PageRecord {
-  return { id: row.id, notebookId: row.notebook_id, sectionId: row.section_id, title: row.title, titleSource: row.title_source, pinned: row.pinned, order: row.sort_order, content: row.content, plainText: row.plain_text, tags: row.tags ?? [], createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, notebookId: row.notebook_id, sectionId: row.section_id, title: row.title, titleSource: row.title_source, pinned: row.pinned, order: row.sort_order, content: row.content, plainText: row.plain_text, tags: row.tags ?? [], createdAt: row.created_at, updatedAt: row.updated_at, trashedAt: row.trashed_at ?? null };
 }
 
 function errorMessage(error: unknown) {
@@ -103,6 +106,11 @@ export default function ObscribeApp() {
   const [query, setQuery] = useState('');
   const [capture, setCapture] = useState('');
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedNotebooks, setTrashedNotebooks] = useState<Notebook[]>([]);
+  const [trashedSections, setTrashedSections] = useState<Section[]>([]);
+  const [trashedPages, setTrashedPages] = useState<PageRecord[]>([]);
 
   const isCloudMode = Boolean(user && supabase);
 
@@ -146,7 +154,8 @@ export default function ObscribeApp() {
   }
 
   async function loadLocalWorkspace() {
-    let books = await db.notebooks.orderBy('order').toArray();
+    let allBooks = await db.notebooks.orderBy('order').toArray();
+    let books = allBooks.filter((book) => !book.trashedAt);
     if (!books.length) {
       const now = new Date().toISOString();
       const notebook: Notebook = { id: newId(), name: 'My First Notebook', accentColor: colors[0], order: 0, createdAt: now, updatedAt: now };
@@ -161,14 +170,17 @@ export default function ObscribeApp() {
       });
       books = [notebook];
     }
-    const secs = await db.sections.orderBy('order').toArray();
-    const pgs = await db.pages.orderBy('order').toArray();
-    setWorkspace(books, secs, pgs);
+    const allSecs = await db.sections.orderBy('order').toArray();
+    const allPgs = await db.pages.orderBy('order').toArray();
+    setTrashedNotebooks(allSecs.length || allPgs.length || allBooks.length ? allBooks.filter((book) => book.trashedAt) : []);
+    setTrashedSections(allSecs.filter((section) => section.trashedAt));
+    setTrashedPages(allPgs.filter((page) => page.trashedAt));
+    setWorkspace(books, allSecs.filter((section) => !section.trashedAt), allPgs.filter((page) => !page.trashedAt));
   }
 
   async function loadCloudWorkspace(userId: string) {
     if (!supabase) return;
-    const { data: notebookRows, error: notebookError } = await supabase.from('notebooks').select('*').order('sort_order');
+    const { data: notebookRows, error: notebookError } = await supabase.from('notebooks').select('*').is('trashed_at', null).order('sort_order');
     if (notebookError) throw notebookError;
 
     if (!notebookRows?.length) {
@@ -176,15 +188,24 @@ export default function ObscribeApp() {
     }
 
     const [{ data: cloudNotebooks, error: nError }, { data: cloudSections, error: sError }, { data: cloudPages, error: pError }] = await Promise.all([
-      supabase.from('notebooks').select('*').order('sort_order'),
-      supabase.from('sections').select('*').order('sort_order'),
-      supabase.from('pages').select('*').order('sort_order')
+      supabase.from('notebooks').select('*').is('trashed_at', null).order('sort_order'),
+      supabase.from('sections').select('*').is('trashed_at', null).order('sort_order'),
+      supabase.from('pages').select('*').is('trashed_at', null).order('sort_order')
     ]);
     if (nError) throw nError;
     if (sError) throw sError;
     if (pError) throw pError;
 
     setWorkspace((cloudNotebooks ?? []).map(toNotebook), (cloudSections ?? []).map(toSection), (cloudPages ?? []).map(toPage));
+
+    const [{ data: trashBooks }, { data: trashSections }, { data: trashPages }] = await Promise.all([
+      supabase.from('notebooks').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false }),
+      supabase.from('sections').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false }),
+      supabase.from('pages').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false })
+    ]);
+    setTrashedNotebooks((trashBooks ?? []).map(toNotebook));
+    setTrashedSections((trashSections ?? []).map(toSection));
+    setTrashedPages((trashPages ?? []).map(toPage));
   }
 
   async function createCloudStarterWorkspace(userId: string) {
@@ -229,31 +250,31 @@ export default function ObscribeApp() {
 
   const refreshPages = async () => {
     if (isCloudMode && supabase) {
-      const { data, error } = await supabase.from('pages').select('*').order('sort_order');
+      const { data, error } = await supabase.from('pages').select('*').is('trashed_at', null).order('sort_order');
       if (error) throw error;
       setPages((data ?? []).map(toPage));
     } else {
-      setPages(await db.pages.orderBy('order').toArray());
+      setPages((await db.pages.orderBy('order').toArray()).filter((page) => !page.trashedAt));
     }
   };
 
   const refreshNotebooks = async () => {
     if (isCloudMode && supabase) {
-      const { data, error } = await supabase.from('notebooks').select('*').order('sort_order');
+      const { data, error } = await supabase.from('notebooks').select('*').is('trashed_at', null).order('sort_order');
       if (error) throw error;
       setNotebooks((data ?? []).map(toNotebook));
     } else {
-      setNotebooks(await db.notebooks.orderBy('order').toArray());
+      setNotebooks((await db.notebooks.orderBy('order').toArray()).filter((notebook) => !notebook.trashedAt));
     }
   };
 
   const refreshSections = async () => {
     if (isCloudMode && supabase) {
-      const { data, error } = await supabase.from('sections').select('*').order('sort_order');
+      const { data, error } = await supabase.from('sections').select('*').is('trashed_at', null).order('sort_order');
       if (error) throw error;
       setSections((data ?? []).map(toSection));
     } else {
-      setSections(await db.sections.orderBy('order').toArray());
+      setSections((await db.sections.orderBy('order').toArray()).filter((section) => !section.trashedAt));
     }
   };
 
@@ -305,12 +326,19 @@ export default function ObscribeApp() {
     const updated: PageRecord = { ...page, content, plainText, title: derived.title, titleSource: derived.source, tags: tagsFromText(plainText), updatedAt: new Date().toISOString() };
 
     setPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    setSaveState('saving');
 
+    try {
     if (isCloudMode && supabase) {
       const { error } = await supabase.from('pages').update({ title: updated.title, title_source: updated.titleSource, content: updated.content, plain_text: updated.plainText, tags: updated.tags, updated_at: updated.updatedAt }).eq('id', updated.id);
       if (error) throw error;
     } else {
       await db.pages.put(updated);
+    }
+    setSaveState('saved');
+    } catch (error: unknown) {
+      setSaveState('error');
+      setOperationError(`Save failed: ${errorMessage(error)}`);
     }
   }
 
@@ -353,35 +381,105 @@ export default function ObscribeApp() {
     }
   }
 
-  async function deletePage(page: PageRecord) {
-    if (!confirm(`Delete page “${page.title}”? This alpha delete cannot be undone yet.`)) return;
+  async function refreshTrash() {
     if (isCloudMode && supabase) {
-      const { error } = await supabase.from('pages').delete().eq('id', page.id);
+      const [{ data: trashBooks }, { data: trashSections }, { data: trashPages }] = await Promise.all([
+        supabase.from('notebooks').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false }),
+        supabase.from('sections').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false }),
+        supabase.from('pages').select('*').not('trashed_at', 'is', null).order('trashed_at', { ascending: false })
+      ]);
+      setTrashedNotebooks((trashBooks ?? []).map(toNotebook));
+      setTrashedSections((trashSections ?? []).map(toSection));
+      setTrashedPages((trashPages ?? []).map(toPage));
+      return;
+    }
+    const [allBooks, allSecs, allPgs] = await Promise.all([
+      db.notebooks.orderBy('order').toArray(),
+      db.sections.orderBy('order').toArray(),
+      db.pages.orderBy('order').toArray()
+    ]);
+    setTrashedNotebooks(allBooks.filter((notebook) => notebook.trashedAt));
+    setTrashedSections(allSecs.filter((section) => section.trashedAt));
+    setTrashedPages(allPgs.filter((page) => page.trashedAt));
+  }
+
+  async function refreshWorkspaceAndTrash() {
+    await Promise.all([refreshNotebooks(), refreshSections(), refreshPages(), refreshTrash()]);
+  }
+
+  async function renameNotebook(notebook: Notebook) {
+    const name = prompt('Rename notebook', notebook.name)?.trim();
+    if (!name || name === notebook.name) return;
+    const updatedAt = new Date().toISOString();
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('notebooks').update({ name, updated_at: updatedAt }).eq('id', notebook.id);
       if (error) throw error;
     } else {
-      await db.pages.delete(page.id);
+      await db.notebooks.update(notebook.id, { name, updatedAt });
+    }
+    setNotebooks((prev) => prev.map((item) => item.id === notebook.id ? { ...item, name, updatedAt } : item));
+  }
+
+  async function renameSection(section: Section) {
+    const name = prompt('Rename section', section.name)?.trim();
+    if (!name || name === section.name) return;
+    const updatedAt = new Date().toISOString();
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('sections').update({ name, updated_at: updatedAt }).eq('id', section.id);
+      if (error) throw error;
+    } else {
+      await db.sections.update(section.id, { name, updatedAt });
+    }
+    setSections((prev) => prev.map((item) => item.id === section.id ? { ...item, name, updatedAt } : item));
+  }
+
+  async function renamePage(page: PageRecord) {
+    const title = prompt('Rename page', page.title)?.trim();
+    if (!title || title === page.title) return;
+    const updatedAt = new Date().toISOString();
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('pages').update({ title, title_source: 'manual', updated_at: updatedAt }).eq('id', page.id);
+      if (error) throw error;
+    } else {
+      await db.pages.update(page.id, { title, titleSource: 'manual', updatedAt });
+    }
+    setPages((prev) => prev.map((item) => item.id === page.id ? { ...item, title, titleSource: 'manual', updatedAt } : item));
+  }
+
+  async function deletePage(page: PageRecord) {
+    if (!confirm(`Move page “${page.title}” to Trash?`)) return;
+    const trashedAt = new Date().toISOString();
+    if (isCloudMode && supabase) {
+      const { error } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', page.id);
+      if (error) throw error;
+    } else {
+      await db.pages.update(page.id, { trashedAt, updatedAt: trashedAt });
     }
     const remaining = pages.filter((p) => p.id !== page.id);
     setPages(remaining);
+    setTrashedPages((prev) => [{ ...page, trashedAt, updatedAt: trashedAt }, ...prev]);
     if (activePageId === page.id) setActivePageId(remaining.find((p) => p.sectionId === page.sectionId)?.id);
   }
 
   async function deleteSection(section: Section) {
     const pageCount = pages.filter((p) => p.sectionId === section.id).length;
-    if (!confirm(`Delete section “${section.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'}? This alpha delete cannot be undone yet.`)) return;
+    if (!confirm(`Move section “${section.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'} to Trash?`)) return;
+    const trashedAt = new Date().toISOString();
 
     if (isCloudMode && supabase) {
-      const { error } = await supabase.from('sections').delete().eq('id', section.id);
-      if (error) throw error;
+      const { error: sectionError } = await supabase.from('sections').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', section.id);
+      if (sectionError) throw sectionError;
+      const { error: pageError } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('section_id', section.id);
+      if (pageError) throw pageError;
     } else {
+      const childPages = await db.pages.where('sectionId').equals(section.id).toArray();
       await db.transaction('rw', db.sections, db.pages, async () => {
-        await db.sections.delete(section.id);
-        await db.pages.where('sectionId').equals(section.id).delete();
+        await db.sections.update(section.id, { trashedAt, updatedAt: trashedAt });
+        await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt, updatedAt: trashedAt })));
       });
     }
 
-    await refreshSections();
-    await refreshPages();
+    await refreshWorkspaceAndTrash();
     const nextSection = sections.find((s) => s.notebookId === section.notebookId && s.id !== section.id);
     setActiveSectionId(nextSection?.id);
     setActivePageId(nextSection ? pages.find((p) => p.sectionId === nextSection.id)?.id : undefined);
@@ -389,29 +487,86 @@ export default function ObscribeApp() {
 
   async function deleteNotebook(notebook: Notebook) {
     const pageCount = pages.filter((p) => p.notebookId === notebook.id).length;
-    if (!confirm(`Delete notebook “${notebook.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'}? This alpha delete cannot be undone yet.`)) return;
+    if (!confirm(`Move notebook “${notebook.name}” and ${pageCount} page${pageCount === 1 ? '' : 's'} to Trash?`)) return;
+    const trashedAt = new Date().toISOString();
 
     if (isCloudMode && supabase) {
-      const { error } = await supabase.from('notebooks').delete().eq('id', notebook.id);
-      if (error) throw error;
+      const { error: notebookError } = await supabase.from('notebooks').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('id', notebook.id);
+      if (notebookError) throw notebookError;
+      const { error: sectionError } = await supabase.from('sections').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('notebook_id', notebook.id);
+      if (sectionError) throw sectionError;
+      const { error: pageError } = await supabase.from('pages').update({ trashed_at: trashedAt, updated_at: trashedAt }).eq('notebook_id', notebook.id);
+      if (pageError) throw pageError;
     } else {
+      const childSections = await db.sections.where('notebookId').equals(notebook.id).toArray();
+      const childPages = await db.pages.where('notebookId').equals(notebook.id).toArray();
       await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
-        await db.notebooks.delete(notebook.id);
-        await db.sections.where('notebookId').equals(notebook.id).delete();
-        await db.pages.where('notebookId').equals(notebook.id).delete();
+        await db.notebooks.update(notebook.id, { trashedAt, updatedAt: trashedAt });
+        await db.sections.bulkPut(childSections.map((section) => ({ ...section, trashedAt, updatedAt: trashedAt })));
+        await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt, updatedAt: trashedAt })));
       });
     }
 
     const nextBooks = notebooks.filter((n) => n.id !== notebook.id);
-    await refreshNotebooks();
-    await refreshSections();
-    await refreshPages();
+    await refreshWorkspaceAndTrash();
     const nextNotebook = nextBooks[0];
     setActiveNotebookId(nextNotebook?.id);
     const nextSection = nextNotebook ? sections.find((s) => s.notebookId === nextNotebook.id) : undefined;
     setActiveSectionId(nextSection?.id);
     setActivePageId(nextSection ? pages.find((p) => p.sectionId === nextSection.id)?.id : undefined);
   }
+
+  async function restoreItem(kind: 'notebook' | 'section' | 'page', id: string) {
+    const updatedAt = new Date().toISOString();
+    if (isCloudMode && supabase) {
+      if (kind === 'notebook') {
+        await supabase.from('notebooks').update({ trashed_at: null, updated_at: updatedAt }).eq('id', id).throwOnError();
+        await supabase.from('sections').update({ trashed_at: null, updated_at: updatedAt }).eq('notebook_id', id).throwOnError();
+        await supabase.from('pages').update({ trashed_at: null, updated_at: updatedAt }).eq('notebook_id', id).throwOnError();
+      } else if (kind === 'section') {
+        await supabase.from('sections').update({ trashed_at: null, updated_at: updatedAt }).eq('id', id).throwOnError();
+        await supabase.from('pages').update({ trashed_at: null, updated_at: updatedAt }).eq('section_id', id).throwOnError();
+      } else {
+        await supabase.from('pages').update({ trashed_at: null, updated_at: updatedAt }).eq('id', id).throwOnError();
+      }
+    } else {
+      if (kind === 'notebook') {
+        const childSections = await db.sections.where('notebookId').equals(id).toArray();
+        const childPages = await db.pages.where('notebookId').equals(id).toArray();
+        await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+          await db.notebooks.update(id, { trashedAt: null, updatedAt });
+          await db.sections.bulkPut(childSections.map((section) => ({ ...section, trashedAt: null, updatedAt })));
+          await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt: null, updatedAt })));
+        });
+      } else if (kind === 'section') {
+        const childPages = await db.pages.where('sectionId').equals(id).toArray();
+        await db.transaction('rw', db.sections, db.pages, async () => {
+          await db.sections.update(id, { trashedAt: null, updatedAt });
+          await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt: null, updatedAt })));
+        });
+      } else {
+        await db.pages.update(id, { trashedAt: null, updatedAt });
+      }
+    }
+    await loadWorkspace(user);
+  }
+
+  async function permanentlyDeleteItem(kind: 'notebook' | 'section' | 'page', id: string, label: string) {
+    if (!confirm(`Permanently delete “${label}”? This cannot be undone.`)) return;
+    if (isCloudMode && supabase) {
+      const table = kind === 'notebook' ? 'notebooks' : kind === 'section' ? 'sections' : 'pages';
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) throw error;
+    } else {
+      if (kind === 'notebook') await db.notebooks.delete(id);
+      if (kind === 'section') await db.sections.delete(id);
+      if (kind === 'page') await db.pages.delete(id);
+    }
+    await refreshTrash();
+  }
+
+  const trashCount = trashedNotebooks.length + trashedSections.length + trashedPages.length;
+
 
   if (!ready) return <main className="loading">Opening your notebook…</main>;
   if (loadError) return <main className="loading error-state"><h1>Couldn’t open the notebook</h1><p>{loadError}</p><p>If you just created Supabase tables, refresh once and confirm RLS policies are enabled.</p></main>;
@@ -421,11 +576,13 @@ export default function ObscribeApp() {
       <aside className="shelf">
         <div className="brand"><Sparkles size={18} /> Obscribe</div>
         <button className="new" onClick={createNotebook}><Plus size={16} /> Notebook</button>
+        <button className={showTrash ? "trash-toggle active" : "trash-toggle"} onClick={() => setShowTrash((value) => !value)}><Trash2 size={15} /> Trash {trashCount ? `(${trashCount})` : ""}</button>
         <div className="books">
           {notebooks.map((book) => (
             <div key={book.id} className={book.id === activeNotebookId ? 'book-row active' : 'book-row'}>
-              <button className="book" onClick={() => { setActiveNotebookId(book.id); const first = sections.find((s) => s.notebookId === book.id); setActiveSectionId(first?.id); setActivePageId(pages.find((p) => p.notebookId === book.id)?.id); }}><span style={{ background: book.accentColor }} />{book.name}</button>
-              <button className="icon-danger shelf-danger" title={`Delete ${book.name}`} onClick={() => deleteNotebook(book)}><Trash2 size={15} /></button>
+              <button className="book" onClick={() => { setShowTrash(false); setActiveNotebookId(book.id); const first = sections.find((s) => s.notebookId === book.id); setActiveSectionId(first?.id); setActivePageId(pages.find((p) => p.notebookId === book.id)?.id); }}><span style={{ background: book.accentColor }} />{book.name}</button>
+              <button className="icon-danger shelf-danger" title={`Rename ${book.name}`} onClick={() => renameNotebook(book)}><Pencil size={14} /></button>
+              <button className="icon-danger shelf-danger" title={`Move ${book.name} to Trash`} onClick={() => deleteNotebook(book)}><Trash2 size={15} /></button>
             </div>
           ))}
         </div>
@@ -444,17 +601,26 @@ export default function ObscribeApp() {
 
         <AuthPanel />
 
-        <div className="sync-strip">{isCloudMode ? <><Cloud size={15} /> Signed in: saving this workspace to Supabase.</> : <><HardDrive size={15} /> Signed out: saving locally in this browser.</>}</div>
+        <div className="sync-strip">{isCloudMode ? <><Cloud size={15} /> Cloud workspace</> : <><HardDrive size={15} /> Local browser workspace</>}<span className={`save-pill ${saveState}`}>{saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Ready'}</span></div>
 
         <div className="capture"><Inbox size={17} /><input value={capture} onChange={(e) => setCapture(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickCapture(); }} placeholder="Quick capture a thought into Inbox…" /><button onClick={quickCapture}>Capture</button></div>
         {operationError && <div className="operation-error">{operationError}</div>}
 
-        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Delete ${section.name}`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}</nav>
+        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => renameSection(section)}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}</nav>
 
+        {showTrash ? (
+          <section className="trash-panel">
+            <div className="trash-header"><h2>Trash</h2><p>Restore items or permanently delete them.</p></div>
+            {trashCount === 0 && <div className="empty compact-empty"><h2>Trash is empty</h2><p>Deleted notebooks, sections, and pages will show up here.</p></div>}
+            {!!trashedNotebooks.length && <div className="trash-group"><h3>Notebooks</h3>{trashedNotebooks.map((item) => <div key={item.id} className="trash-row"><span>{item.name}</span><div><button className="ghost-button compact" onClick={() => restoreItem('notebook', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('notebook', item.id, item.name)}><XCircle size={15} /></button></div></div>)}</div>}
+            {!!trashedSections.length && <div className="trash-group"><h3>Sections</h3>{trashedSections.map((item) => <div key={item.id} className="trash-row"><span>{item.name}</span><div><button className="ghost-button compact" onClick={() => restoreItem('section', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('section', item.id, item.name)}><XCircle size={15} /></button></div></div>)}</div>}
+            {!!trashedPages.length && <div className="trash-group"><h3>Pages</h3>{trashedPages.map((item) => <div key={item.id} className="trash-row"><span>{item.title}</span><div><button className="ghost-button compact" onClick={() => restoreItem('page', item.id)}><RotateCcw size={14} /> Restore</button><button className="icon-danger" onClick={() => permanentlyDeleteItem('page', item.id, item.title)}><XCircle size={15} /></button></div></div>)}</div>}
+          </section>
+        ) : (
         <div className="notebook-layout">
           <aside className="pages-panel">
             <button className="page-create" onClick={() => createPage()}><Plus size={15} /> New Page</button>
-            {sectionPages.map((page) => <div key={page.id} className={page.id === activePageId ? 'page-row active' : 'page-row'}><button className="page-link" onClick={() => setActivePageId(page.id)}>{page.pinned ? '★ ' : ''}{page.title}<small>{page.tags.map((tag) => `#${tag}`).join(' ')}</small></button><button className="icon-danger" title={`Delete ${page.title}`} onClick={() => deletePage(page)}><Trash2 size={15} /></button></div>)}
+            {sectionPages.map((page) => <div key={page.id} className={page.id === activePageId ? 'page-row active' : 'page-row'}><button className="page-link" onClick={() => setActivePageId(page.id)}>{page.pinned ? '★ ' : ''}{page.title}<small>{page.tags.map((tag) => `#${tag}`).join(' ')}</small></button><button className="icon-danger" title={`Rename ${page.title}`} onClick={() => renamePage(page)}><Pencil size={14} /></button><button className="icon-danger" title={`Move ${page.title} to Trash`} onClick={() => deletePage(page)}><Trash2 size={15} /></button></div>)}
           </aside>
 
           <article className="paper">
@@ -464,6 +630,7 @@ export default function ObscribeApp() {
             </> : <div className="empty"><h2>No page selected</h2><p>Create a page to start writing in this section.</p><button onClick={() => createPage()}>Create page</button></div>}
           </article>
         </div>
+        )}
       </section>
     </main>
   );

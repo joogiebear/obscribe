@@ -97,3 +97,20 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
 .auth-form-page .link-button { justify-content: center; }
 .sync-strip { margin: -4px 0 12px; color: var(--muted); font-size: 13px; display: inline-flex; align-items: center; gap: 7px; }
 .operation-error { margin: -6px 0 12px; border: 1px solid #efb4a8; background: #fff0ec; color: #8c2f20; border-radius: 12px; padding: 9px 11px; font-size: 14px; }
+.book-row { grid-template-columns: 1fr auto auto; }
+.page-row { grid-template-columns: 1fr auto auto; }
+.trash-toggle { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: #f8efe2; border-radius: 12px; padding: 10px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.trash-toggle.active, .trash-toggle:hover { background: rgba(255,255,255,.13); border-color: rgba(255,255,255,.22); }
+.save-pill { margin-left: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; background: rgba(255,255,255,.5); color: var(--muted); }
+.save-pill.saving { color: #9a6200; border-color: #e3bd74; background: #fff6df; }
+.save-pill.saved { color: #397048; border-color: #a8cfad; background: #eef9ef; }
+.save-pill.error { color: #8c2f20; border-color: #efb4a8; background: #fff0ec; }
+.trash-panel { background: var(--paper); border: 1px solid var(--line); border-radius: 0 0 22px 22px; padding: 24px; min-height: calc(100vh - 230px); }
+.trash-header h2 { margin: 0 0 4px; font-size: 28px; letter-spacing: -.03em; }
+.trash-header p { margin: 0 0 18px; color: var(--muted); }
+.trash-group { display: grid; gap: 8px; margin-bottom: 22px; }
+.trash-group h3 { margin: 0 0 4px; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .12em; }
+.trash-row { border: 1px solid var(--line); background: rgba(255,250,240,.65); border-radius: 14px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.trash-row > div { display: flex; align-items: center; gap: 8px; }
+.compact-empty { min-height: 28vh; }
+@media (max-width: 560px) { .trash-row { align-items: flex-start; flex-direction: column; } .trash-row > div { width: 100%; justify-content: space-between; } }
