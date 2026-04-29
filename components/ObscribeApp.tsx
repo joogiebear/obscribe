@@ -66,6 +66,15 @@ function toPage(row: CloudPage): PageRecord {
   return { id: row.id, notebookId: row.notebook_id, sectionId: row.section_id, title: row.title, titleSource: row.title_source, pinned: row.pinned, order: row.sort_order, content: row.content, plainText: row.plain_text, tags: row.tags ?? [], createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const maybe = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    return [maybe.message, maybe.details, maybe.hint, maybe.code].filter(Boolean).join(' · ') || JSON.stringify(error);
+  }
+  return String(error || 'Unknown startup error');
+}
+
 function welcomePageContent(): JSONContent {
   return {
     type: 'doc',
@@ -107,7 +116,7 @@ export default function ObscribeApp() {
 
     boot().catch((error: unknown) => {
       console.error('Failed to open Obscribe notebook', error);
-      setLoadError(error instanceof Error ? error.message : 'Unknown startup error');
+      setLoadError(errorMessage(error));
       setReady(true);
     });
 
@@ -120,7 +129,7 @@ export default function ObscribeApp() {
         .then(() => setReady(true))
         .catch((error: unknown) => {
           console.error('Failed to switch Obscribe workspace', error);
-          setLoadError(error instanceof Error ? error.message : 'Unknown workspace error');
+          setLoadError(errorMessage(error));
           setReady(true);
         });
     });
