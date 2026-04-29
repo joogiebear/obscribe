@@ -272,6 +272,8 @@ export default function ObscribeApp() {
   const [includeStarterSections, setIncludeStarterSections] = useState(true);
   const [showSectionModal, setShowSectionModal] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
+  const [renameModal, setRenameModal] = useState<{ kind: 'notebook' | 'section' | 'page'; id: string; title: string; label: string; value: string } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [aiSummary, setAiSummary] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ title: string; body: string; confirmLabel: string; destructive?: boolean; onConfirm: () => Promise<void> } | null>(null);
@@ -744,8 +746,31 @@ export default function ObscribeApp() {
     await Promise.all([refreshNotebooks(), refreshSections(), refreshPages(), refreshTrash()]);
   }
 
-  async function renameNotebook(notebook: Notebook) {
-    const name = prompt('Rename notebook', notebook.name)?.trim();
+  function openRenameModal(options: { kind: 'notebook' | 'section' | 'page'; id: string; title: string; label: string; value: string }) {
+    setRenameModal(options);
+    setRenameValue(options.value);
+  }
+
+  async function submitRename() {
+    if (!renameModal) return;
+    const value = renameValue.trim();
+    if (!value || value === renameModal.value) { setRenameModal(null); return; }
+    if (renameModal.kind === 'notebook') {
+      const notebook = notebooks.find((item) => item.id === renameModal.id);
+      if (notebook) await renameNotebook(notebook, value);
+    } else if (renameModal.kind === 'section') {
+      const section = sections.find((item) => item.id === renameModal.id);
+      if (section) await renameSection(section, value);
+    } else {
+      const page = pages.find((item) => item.id === renameModal.id);
+      if (page) await renamePage(page, value);
+    }
+    setRenameModal(null);
+    setRenameValue('');
+  }
+
+  async function renameNotebook(notebook: Notebook, nextName?: string) {
+    const name = (nextName ?? notebook.name).trim();
     if (!name || name === notebook.name) return;
     const updatedAt = new Date().toISOString();
     if (isCloudMode && supabase) {
@@ -757,8 +782,8 @@ export default function ObscribeApp() {
     setNotebooks((prev) => prev.map((item) => item.id === notebook.id ? { ...item, name, updatedAt } : item));
   }
 
-  async function renameSection(section: Section) {
-    const name = prompt('Rename section', section.name)?.trim();
+  async function renameSection(section: Section, nextName?: string) {
+    const name = (nextName ?? section.name).trim();
     if (!name || name === section.name) return;
     const updatedAt = new Date().toISOString();
     if (isCloudMode && supabase) {
@@ -793,8 +818,8 @@ export default function ObscribeApp() {
     setActivePageId(undefined);
   }
 
-  async function renamePage(page: PageRecord) {
-    const title = prompt('Rename page', page.title)?.trim();
+  async function renamePage(page: PageRecord, nextTitle?: string) {
+    const title = (nextTitle ?? page.title).trim();
     if (!title || title === page.title) return;
     const updatedAt = new Date().toISOString();
     if (isCloudMode && supabase) {
@@ -1032,7 +1057,7 @@ export default function ObscribeApp() {
           {notebooks.map((book) => (
             <div key={book.id} className={book.id === activeNotebookId ? 'book-row active' : 'book-row'}>
               <button className="book" onClick={() => { setShowTrash(false); setActiveNotebookId(book.id); const first = sections.find((s) => s.notebookId === book.id); setActiveSectionId(first?.id); setActivePageId(pages.find((p) => p.notebookId === book.id)?.id); }}><span style={{ background: book.accentColor }} />{book.name}</button>
-              <button className="icon-danger shelf-danger" title={`Rename ${book.name}`} onClick={() => renameNotebook(book)}><Pencil size={14} /></button>
+              <button className="icon-danger shelf-danger" title={`Rename ${book.name}`} onClick={() => openRenameModal({ kind: 'notebook', id: book.id, title: 'Rename notebook', label: 'Notebook name', value: book.name })}><Pencil size={14} /></button>
               <button className="icon-danger shelf-danger" title={`Move ${book.name} to Trash`} onClick={() => deleteNotebook(book)}><Trash2 size={15} /></button>
             </div>
           ))}
@@ -1073,7 +1098,7 @@ export default function ObscribeApp() {
             </div>
           </section>
         ) : <>
-        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => renameSection(section)}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}<button className="tab-add" onClick={() => { setNewSectionName(''); setShowSectionModal(true); }}><Plus size={14} /> Tab</button></nav>
+        <nav className="tabs">{notebookSections.map((section) => <div key={section.id} className={section.id === activeSectionId ? 'tab-wrap active' : 'tab-wrap'}><button className="tab" onClick={() => { setActiveSectionId(section.id); setActivePageId(pages.find((p) => p.sectionId === section.id)?.id); }}>{section.name}</button><button className="icon-danger tab-danger" title={`Rename ${section.name}`} onClick={() => openRenameModal({ kind: 'section', id: section.id, title: 'Rename tab', label: 'Tab name', value: section.name })}><Pencil size={13} /></button><button className="icon-danger tab-danger" title={`Move ${section.name} to Trash`} onClick={() => deleteSection(section)}><Trash2 size={14} /></button></div>)}<button className="tab-add" onClick={() => { setNewSectionName(''); setShowSectionModal(true); }}><Plus size={14} /> Tab</button></nav>
 
         {showTrash ? (
           <section className="trash-panel">
@@ -1087,7 +1112,7 @@ export default function ObscribeApp() {
         <div className="notebook-layout">
           <aside className="pages-panel">
             <button className="page-create" onClick={() => createPage()}><Plus size={15} /> New Page</button>
-            {sectionPages.map((page) => <div key={page.id} className={page.id === activePageId ? 'page-row active' : 'page-row'}><button className="page-link" onClick={() => setActivePageId(page.id)}>{page.pinned ? '★ ' : ''}{page.title}<small>{page.tags.map((tag) => `#${tag}`).join(' ')}</small></button><button className="icon-danger" title={`Rename ${page.title}`} onClick={() => renamePage(page)}><Pencil size={14} /></button><button className="icon-danger" title={`Move ${page.title} to Trash`} onClick={() => deletePage(page)}><Trash2 size={15} /></button></div>)}
+            {sectionPages.map((page) => <div key={page.id} className={page.id === activePageId ? 'page-row active' : 'page-row'}><button className="page-link" onClick={() => setActivePageId(page.id)}>{page.pinned ? '★ ' : ''}{page.title}<small>{page.tags.map((tag) => `#${tag}`).join(' ')}</small></button><button className="icon-danger" title={`Rename ${page.title}`} onClick={() => openRenameModal({ kind: 'page', id: page.id, title: 'Rename page', label: 'Page title', value: page.title })}><Pencil size={14} /></button><button className="icon-danger" title={`Move ${page.title} to Trash`} onClick={() => deletePage(page)}><Trash2 size={15} /></button></div>)}
           </aside>
 
           <article className="paper">
@@ -1138,6 +1163,17 @@ export default function ObscribeApp() {
             <p className="modal-copy">Tabs keep pages grouped inside “{activeNotebook?.name ?? 'this notebook'}”.</p>
             <label className="modal-field">Tab name<input value={newSectionName} onChange={(event) => setNewSectionName(event.target.value)} placeholder="Meetings, Clients, Ideas…" autoFocus onKeyDown={(event) => { if (event.key === 'Enter') createSection(); if (event.key === 'Escape') setShowSectionModal(false); }} /></label>
             <div className="modal-actions"><button className="ghost-button" onClick={() => setShowSectionModal(false)}>Cancel</button><button className="new" onClick={createSection}><Plus size={16} /> Create Tab</button></div>
+          </section>
+        </div>
+      )}
+      {renameModal && (
+        <div className="modal-backdrop" onMouseDown={() => setRenameModal(null)}>
+          <section className="notebook-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <p className="eyebrow">Edit</p>
+            <h2>{renameModal.title}</h2>
+            <p className="modal-copy">Update the label without leaving your notebook.</p>
+            <label className="modal-field">{renameModal.label}<input value={renameValue} maxLength={renameModal.kind === 'page' ? alphaLimits.pageTitleChars : alphaLimits.notebookNameChars} onChange={(event) => setRenameValue(event.target.value)} autoFocus onKeyDown={(event) => { if (event.key === 'Enter') submitRename(); if (event.key === 'Escape') setRenameModal(null); }} /></label>
+            <div className="modal-actions"><button className="ghost-button" onClick={() => setRenameModal(null)}>Cancel</button><button className="new" onClick={submitRename}><Pencil size={16} /> Save Rename</button></div>
           </section>
         </div>
       )}
