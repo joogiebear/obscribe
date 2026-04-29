@@ -108,7 +108,7 @@ export default function AuthPanel() {
             <div className="avatar">{avatar ? <img src={avatar} alt="" /> : avatarLabel(user.email, name)}</div>
             <div className="account-copy">
               <strong title={visibleName}>{visibleName}</strong>
-              <span>Cloud Alpha enabled</span>
+              <span>Free Alpha plan</span>
             </div>
           </div>
           <div className="sidebar-auth-actions">
