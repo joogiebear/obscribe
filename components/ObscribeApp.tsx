@@ -1127,9 +1127,16 @@ export default function ObscribeApp() {
         await supabase.from('sections').update({ trashed_at: null, updated_at: updatedAt }).eq('notebook_id', id).throwOnError();
         await supabase.from('pages').update({ trashed_at: null, updated_at: updatedAt }).eq('notebook_id', id).throwOnError();
       } else if (kind === 'section') {
+        const { data: section, error: sectionLookupError } = await supabase.from('sections').select('notebook_id').eq('id', id).single();
+        if (sectionLookupError) throw sectionLookupError;
+        await supabase.from('notebooks').update({ trashed_at: null, updated_at: updatedAt }).eq('id', section.notebook_id).throwOnError();
         await supabase.from('sections').update({ trashed_at: null, updated_at: updatedAt }).eq('id', id).throwOnError();
         await supabase.from('pages').update({ trashed_at: null, updated_at: updatedAt }).eq('section_id', id).throwOnError();
       } else {
+        const { data: page, error: pageLookupError } = await supabase.from('pages').select('notebook_id, section_id').eq('id', id).single();
+        if (pageLookupError) throw pageLookupError;
+        await supabase.from('notebooks').update({ trashed_at: null, updated_at: updatedAt }).eq('id', page.notebook_id).throwOnError();
+        await supabase.from('sections').update({ trashed_at: null, updated_at: updatedAt }).eq('id', page.section_id).throwOnError();
         await supabase.from('pages').update({ trashed_at: null, updated_at: updatedAt }).eq('id', id).throwOnError();
       }
     } else {
@@ -1142,13 +1149,22 @@ export default function ObscribeApp() {
           await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt: null, updatedAt })));
         });
       } else if (kind === 'section') {
+        const section = await db.sections.get(id);
+        if (!section) throw new Error('Section not found.');
         const childPages = await db.pages.where('sectionId').equals(id).toArray();
-        await db.transaction('rw', db.sections, db.pages, async () => {
+        await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+          await db.notebooks.update(section.notebookId, { trashedAt: null, updatedAt });
           await db.sections.update(id, { trashedAt: null, updatedAt });
           await db.pages.bulkPut(childPages.map((page) => ({ ...page, trashedAt: null, updatedAt })));
         });
       } else {
-        await db.pages.update(id, { trashedAt: null, updatedAt });
+        const page = await db.pages.get(id);
+        if (!page) throw new Error('Page not found.');
+        await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+          await db.notebooks.update(page.notebookId, { trashedAt: null, updatedAt });
+          await db.sections.update(page.sectionId, { trashedAt: null, updatedAt });
+          await db.pages.update(id, { trashedAt: null, updatedAt });
+        });
       }
     }
     await loadWorkspace(user);
@@ -1162,15 +1178,36 @@ export default function ObscribeApp() {
       destructive: true,
       onConfirm: async () => {
         if (isCloudMode && supabase) {
-          const table = kind === 'notebook' ? 'notebooks' : kind === 'section' ? 'sections' : 'pages';
-          const { error } = await supabase.from(table).delete().eq('id', id);
-          if (error) throw error;
+          if (kind === 'notebook') {
+            await supabase.from('pages').delete().eq('notebook_id', id).throwOnError();
+            await supabase.from('sections').delete().eq('notebook_id', id).throwOnError();
+            await supabase.from('notebooks').delete().eq('id', id).throwOnError();
+          } else if (kind === 'section') {
+            await supabase.from('pages').delete().eq('section_id', id).throwOnError();
+            await supabase.from('sections').delete().eq('id', id).throwOnError();
+          } else {
+            await supabase.from('pages').delete().eq('id', id).throwOnError();
+          }
         } else {
-          if (kind === 'notebook') await db.notebooks.delete(id);
-          if (kind === 'section') await db.sections.delete(id);
+          if (kind === 'notebook') {
+            const childPages = await db.pages.where('notebookId').equals(id).primaryKeys();
+            const childSections = await db.sections.where('notebookId').equals(id).primaryKeys();
+            await db.transaction('rw', db.notebooks, db.sections, db.pages, async () => {
+              await db.pages.bulkDelete(childPages as string[]);
+              await db.sections.bulkDelete(childSections as string[]);
+              await db.notebooks.delete(id);
+            });
+          }
+          if (kind === 'section') {
+            const childPages = await db.pages.where('sectionId').equals(id).primaryKeys();
+            await db.transaction('rw', db.sections, db.pages, async () => {
+              await db.pages.bulkDelete(childPages as string[]);
+              await db.sections.delete(id);
+            });
+          }
           if (kind === 'page') await db.pages.delete(id);
         }
-        await refreshTrash();
+        await loadWorkspace(user);
       }
     });
   }
