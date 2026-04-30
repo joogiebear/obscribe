@@ -1275,6 +1275,7 @@ export default function ObscribeApp() {
           ))}
         </div>
         <AuthPanel />
+        <Link className="feedback-link" href="/contact">Send beta feedback</Link>
         <nav className="trust-links" aria-label="Obscribe information">
           <Link href="/about">About</Link>
           <Link href="/privacy">Privacy</Link>
